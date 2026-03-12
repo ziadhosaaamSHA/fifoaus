@@ -89,6 +89,13 @@ export async function createDiscordBot() {
       return;
     }
     await member.roles.add(cfg.DISCORD_PREMIUM_ROLE_ID, reason);
+    try {
+      await member.send(
+        `Your subscription is active and Premium access has been enabled in **${guild.name}**.`
+      );
+    } catch {
+      // User may have DMs disabled; ignore.
+    }
     await updateSubscriberCounter({ reason: `grant:${reason}` });
   }
 
@@ -107,6 +114,15 @@ export async function createDiscordBot() {
       return;
     }
     await member.roles.remove(cfg.DISCORD_PREMIUM_ROLE_ID, reason);
+    const msg =
+      reason === "invoice.payment_failed"
+        ? `Your payment failed and Premium access was disabled in **${guild.name}**. Please update your payment method and resubscribe.`
+        : `Your subscription ended and Premium access was disabled in **${guild.name}**.`;
+    try {
+      await member.send(msg);
+    } catch {
+      // User may have DMs disabled; ignore.
+    }
     await updateSubscriberCounter({ reason: `revoke:${reason}` });
   }
 

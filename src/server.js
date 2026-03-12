@@ -5,6 +5,7 @@ import { getConfig } from "./config.js";
 import { createStripeClient } from "./stripe/client.js";
 import { createStripeWebhookHandler } from "./stripe/webhook.js";
 import { renderSubscribePage } from "./pages/subscribePage.js";
+import { renderResultPage } from "./pages/resultPages.js";
 
 const checkoutBodySchema = z.object({
   discord_id: z.string().regex(/^\d{17,20}$/),
@@ -20,8 +21,46 @@ export function createApp({ bot }) {
 
   app.get("/", (_req, res) => res.status(200).type("html").send(renderSubscribePage()));
   app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
-  app.get("/success", (_req, res) => res.status(200).send("Payment success. You can close this tab."));
-  app.get("/cancel", (_req, res) => res.status(200).send("Checkout cancelled. You can close this tab."));
+  app.get("/success", (_req, res) =>
+    res.status(200).type("html").send(
+      renderResultPage({
+        variant: "success",
+        title: "Payment Successful",
+        message: "Thanks. If your Discord role doesn't update within a minute, contact support.",
+        supportText: cfg.SUPPORT_TEXT,
+        primaryHref: "/",
+        primaryLabel: "Back to Subscribe"
+      })
+    )
+  );
+  app.get("/cancel", (_req, res) =>
+    res.status(200).type("html").send(
+      renderResultPage({
+        variant: "cancel",
+        title: "Checkout Cancelled",
+        message: "No worries. You can try again whenever you're ready.",
+        supportText: cfg.SUPPORT_TEXT,
+        primaryHref: "/",
+        primaryLabel: "Try Again"
+      })
+    )
+  );
+  app.get("/fail", (req, res) => {
+    const code = typeof req.query.code === "string" ? req.query.code : undefined;
+    const message = code
+      ? `Something went wrong (${code}). Please contact support.`
+      : "Something went wrong. Please contact support.";
+    res.status(200).type("html").send(
+      renderResultPage({
+        variant: "fail",
+        title: "Payment Error",
+        message,
+        supportText: cfg.SUPPORT_TEXT,
+        primaryHref: "/",
+        primaryLabel: "Back"
+      })
+    );
+  });
 
   const asyncRoute =
     (fn) =>
@@ -92,6 +131,21 @@ export function createApp({ bot }) {
 
   app.use((err, _req, res, _next) => {
     console.error("[http] unhandled error", err);
+    // Prefer JSON for API, but show a human page when a browser hits an HTML route.
+    if (res.headersSent) return;
+    if (typeof _req?.accepts === "function" && _req.accepts("html")) {
+      res.status(500).type("html").send(
+        renderResultPage({
+          variant: "fail",
+          title: "Server Error",
+          message: "An unexpected error occurred. Please contact support.",
+          supportText: cfg.SUPPORT_TEXT,
+          primaryHref: "/fail?code=server_error",
+          primaryLabel: "Details"
+        })
+      );
+      return;
+    }
     res.status(500).json({ error: "internal_error" });
   });
 

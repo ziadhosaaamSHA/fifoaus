@@ -7,6 +7,7 @@ const configSchema = z.object({
   BASE_URL: z.string().url().optional(),
   SUCCESS_URL: z.string().url().optional(),
   CANCEL_URL: z.string().url().optional(),
+  SUPPORT_TEXT: z.string().optional(),
 
   STRIPE_SECRET: z.string().min(1),
   STRIPE_WEBHOOK_SECRET: z.string().min(1),
