@@ -47,11 +47,16 @@ export function createApp({ bot }) {
 
       const { discord_id, customer_email } = parsed.data;
 
+      // Stripe requires absolute URLs. Prefer explicit env vars, otherwise derive from the request host.
+      const baseUrl = cfg.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const successUrl = cfg.SUCCESS_URL || `${baseUrl}/success`;
+      const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
+
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
-        success_url: cfg.SUCCESS_URL,
-        cancel_url: cfg.CANCEL_URL,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         customer_email: customer_email || undefined,
         metadata: { discord_id },
         subscription_data: {

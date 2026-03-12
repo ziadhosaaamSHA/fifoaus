@@ -30,27 +30,8 @@ export function getConfig() {
   }
   const cfg = parsed.data;
 
-  // On Railway, `RAILWAY_PUBLIC_DOMAIN` is provided automatically, e.g. `example.up.railway.app`.
-  // We can use it to build default redirect URLs and avoid hardcoding per-deploy domains.
-  const railwayPublicDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
-  const derivedBase =
-    typeof railwayPublicDomain === "string" && railwayPublicDomain.length > 0
-      ? `https://${railwayPublicDomain}`
-      : undefined;
-
-  const successUrl = cfg.SUCCESS_URL || (derivedBase ? `${derivedBase}/success` : undefined);
-  const cancelUrl = cfg.CANCEL_URL || (derivedBase ? `${derivedBase}/cancel` : undefined);
-
-  if (!successUrl || !cancelUrl) {
-    throw new Error(
-      "Missing SUCCESS_URL/CANCEL_URL. Set them for local dev, or deploy on Railway with a public domain."
-    );
-  }
-
   return {
     ...cfg,
-    SUCCESS_URL: successUrl,
-    CANCEL_URL: cancelUrl,
     DISCORD_SUBSCRIBER_VOICE_CHANNEL_ID:
       cfg.DISCORD_SUBSCRIBER_VOICE_CHANNEL_ID || undefined
   };
