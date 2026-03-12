@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getConfig } from "./config.js";
 import { createStripeClient } from "./stripe/client.js";
 import { createStripeWebhookHandler } from "./stripe/webhook.js";
+import { renderSubscribePage } from "./pages/subscribePage.js";
 
 const checkoutBodySchema = z.object({
   discord_id: z.string().regex(/^\d{17,20}$/),
@@ -17,6 +18,7 @@ export function createApp({ bot }) {
   const app = express();
   app.set("trust proxy", 1);
 
+  app.get("/", (_req, res) => res.status(200).type("html").send(renderSubscribePage()));
   app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
   app.get("/success", (_req, res) => res.status(200).send("Payment success. You can close this tab."));
   app.get("/cancel", (_req, res) => res.status(200).send("Checkout cancelled. You can close this tab."));
