@@ -28,16 +28,6 @@ Create a Stripe Checkout session:
 
 Returns `{ "url": "https://checkout.stripe.com/..." }`.
 
-## Discord (in-server button)
-
-The bot can create a Checkout session for the user who clicks a button.
-
-- `/post-subscribe` (Manage Server) posts a "Subscribe" button in the current channel.
-- When a user clicks it, the bot creates a Checkout session using their Discord user ID and replies with an ephemeral "Open Checkout" link.
-- `/subscribe` is the same flow but as a command.
-
-Note: for this Discord-initiated checkout flow you must set `BASE_URL` (or explicit `SUCCESS_URL`/`CANCEL_URL`) so Stripe gets absolute redirect URLs.
-
 ### Webhook
 
 Expose locally (example): `stripe listen --forward-to localhost:3000/stripe/webhook`

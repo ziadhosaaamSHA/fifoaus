@@ -27,9 +27,7 @@ export function createApp({ bot }) {
         variant: "success",
         title: "Payment Successful",
         message: "Thanks. If your Discord role doesn't update within a minute, contact support.",
-        supportText: cfg.SUPPORT_TEXT,
-        primaryHref: "/",
-        primaryLabel: "Back to Subscribe"
+        supportText: cfg.SUPPORT_TEXT
       })
     )
   );
@@ -39,9 +37,7 @@ export function createApp({ bot }) {
         variant: "cancel",
         title: "Checkout Cancelled",
         message: "No worries. You can try again whenever you're ready.",
-        supportText: cfg.SUPPORT_TEXT,
-        primaryHref: "/",
-        primaryLabel: "Try Again"
+        supportText: cfg.SUPPORT_TEXT
       })
     )
   );
@@ -55,9 +51,7 @@ export function createApp({ bot }) {
         variant: "fail",
         title: "Payment Error",
         message,
-        supportText: cfg.SUPPORT_TEXT,
-        primaryHref: "/",
-        primaryLabel: "Back"
+        supportText: cfg.SUPPORT_TEXT
       })
     );
   });

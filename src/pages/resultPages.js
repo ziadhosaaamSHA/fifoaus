@@ -190,6 +190,7 @@ export function renderResultPage({
   const secondary = secondaryHref
     ? `<a class="btn" href="${escapeHtml(secondaryHref)}">${escapeHtml(secondaryLabel || "Back")}</a>`
     : "";
+  const row = primary || secondary ? `<div class="row">${primary}${secondary}</div>` : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -206,7 +207,6 @@ export function renderResultPage({
           <div class="icon-wrap">${iconSvg({ variant })}</div>
           <div>
             <div style="font-weight:800; letter-spacing:-0.01em">${safeTitle}</div>
-            <div style="font-size:13px; color:rgba(2,6,23,0.62)">${new Date().toISOString()}</div>
           </div>
         </div>
         <h1>${safeTitle}</h1>
@@ -216,10 +216,9 @@ export function renderResultPage({
             ? `<p class="meta">Need help? ${safeSupport}</p>`
             : `<p class="meta">Need help? Contact support in the Discord server.</p>`
         }
-        <div class="row">${primary}${secondary}</div>
+        ${row}
       </div>
     </div>
   </body>
 </html>`;
 }
-
