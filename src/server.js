@@ -47,6 +47,10 @@ export function createApp({ bot }) {
 
       const { discord_id, customer_email } = parsed.data;
 
+      if (bot?.hasPremium && (await bot.hasPremium({ discordId: discord_id }))) {
+        return res.status(409).json({ error: "already_premium" });
+      }
+
       // Stripe requires absolute URLs. Prefer explicit env vars, otherwise derive from the request host.
       const baseUrl = cfg.BASE_URL || `${req.protocol}://${req.get("host")}`;
       const successUrl = cfg.SUCCESS_URL || `${baseUrl}/success`;

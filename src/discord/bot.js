@@ -92,6 +92,13 @@ export async function createDiscordBot() {
     await updateSubscriberCounter({ reason: `grant:${reason}` });
   }
 
+  async function hasPremium({ discordId }) {
+    const guild = await getGuild();
+    const member = await guild.members.fetch(discordId).catch(() => null);
+    if (!member) return false;
+    return member.roles.cache.has(cfg.DISCORD_PREMIUM_ROLE_ID);
+  }
+
   async function revokePremium({ discordId, reason }) {
     const guild = await getGuild();
     const member = await guild.members.fetch(discordId).catch(() => null);
@@ -130,6 +137,12 @@ export async function createDiscordBot() {
   });
 
   async function createCheckoutSessionForDiscordUser({ discordId }) {
+    if (await hasPremium({ discordId })) {
+      const err = new Error("already_premium");
+      err.code = "already_premium";
+      throw err;
+    }
+
     // When initiated from Discord, we can't derive host from an HTTP request.
     // Require BASE_URL (or explicit SUCCESS_URL/CANCEL_URL) in production.
     const baseUrl = cfg.BASE_URL;
@@ -181,10 +194,14 @@ export async function createDiscordBot() {
           components: [row]
         });
       } catch (err) {
-        console.error("[discord] subscribe button failed", err);
-        await interaction.editReply({
-          content: "Could not create a checkout session. Please try again later."
-        });
+        if (err?.code === "already_premium" || err?.message === "already_premium") {
+          await interaction.editReply({ content: "You already have Premium access." });
+        } else {
+          console.error("[discord] subscribe button failed", err);
+          await interaction.editReply({
+            content: "Could not create a checkout session. Please try again later."
+          });
+        }
       }
       return;
     }
@@ -208,10 +225,14 @@ export async function createDiscordBot() {
           components: [row]
         });
       } catch (err) {
-        console.error("[discord] /subscribe failed", err);
-        await interaction.editReply({
-          content: "Could not create a checkout session. Please try again later."
-        });
+        if (err?.code === "already_premium" || err?.message === "already_premium") {
+          await interaction.editReply({ content: "You already have Premium access." });
+        } else {
+          console.error("[discord] /subscribe failed", err);
+          await interaction.editReply({
+            content: "Could not create a checkout session. Please try again later."
+          });
+        }
       }
       return;
     }
@@ -297,6 +318,7 @@ export async function createDiscordBot() {
   return {
     grantPremium,
     revokePremium,
+    hasPremium,
     updateSubscriberCounter,
     countPremiumMembers,
     client

@@ -95,8 +95,14 @@ export function renderSubscribePage({ baseUrl } = {}) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ discord_id: discordId })
         });
-        if (!res.ok) throw new Error("Failed to create checkout session");
-        return await res.json();
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (payload && payload.error === "already_premium") {
+            throw new Error("You already have Premium access.");
+          }
+          throw new Error("Failed to create checkout session");
+        }
+        return payload;
       }
 
       button.addEventListener("click", async () => {
@@ -123,4 +129,3 @@ export function renderSubscribePage({ baseUrl } = {}) {
   </body>
 </html>`;
 }
-
