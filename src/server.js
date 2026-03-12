@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getConfig } from "./config.js";
 import { createStripeClient } from "./stripe/client.js";
 import { createStripeWebhookHandler } from "./stripe/webhook.js";
-import { renderSubscribePage } from "./pages/subscribePage.js";
 import { renderResultPage } from "./pages/resultPages.js";
 
 const checkoutBodySchema = z.object({
@@ -19,7 +18,7 @@ export function createApp({ bot }) {
   const app = express();
   app.set("trust proxy", 1);
 
-  app.get("/", (_req, res) => res.status(200).type("html").send(renderSubscribePage()));
+  app.get("/", (_req, res) => res.status(200).json({ ok: true }));
   app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
   app.get("/success", (_req, res) =>
     res.status(200).type("html").send(
