@@ -1,10 +1,16 @@
 import {
   ChannelType,
   Client,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Events,
   GatewayIntentBits,
   PermissionsBitField
 } from "discord.js";
 import { getConfig } from "../config.js";
+import { createStripeClient } from "../stripe/client.js";
+import { LRUCache } from "lru-cache";
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -12,6 +18,7 @@ function sleep(ms) {
 
 export async function createDiscordBot() {
   const cfg = getConfig();
+  const stripe = createStripeClient(cfg);
 
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
@@ -117,7 +124,128 @@ export async function createDiscordBot() {
     });
   });
 
-  client.once("ready", async () => {
+  const subscribeCooldown = new LRUCache({
+    max: 50_000,
+    ttl: 60 * 1000
+  });
+
+  async function createCheckoutSessionForDiscordUser({ discordId }) {
+    // When initiated from Discord, we can't derive host from an HTTP request.
+    // Require BASE_URL (or explicit SUCCESS_URL/CANCEL_URL) in production.
+    const baseUrl = cfg.BASE_URL;
+    const successUrl = cfg.SUCCESS_URL || (baseUrl ? `${baseUrl}/success` : null);
+    const cancelUrl = cfg.CANCEL_URL || (baseUrl ? `${baseUrl}/cancel` : null);
+    if (!successUrl || !cancelUrl) {
+      throw new Error("Missing BASE_URL (or SUCCESS_URL/CANCEL_URL) for Discord subscribe flow.");
+    }
+
+    return await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: { discord_id: discordId },
+      subscription_data: {
+        metadata: { discord_id: discordId }
+      }
+    });
+  }
+
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isButton()) {
+      if (interaction.customId !== "subscribe:create") return;
+
+      const discordId = interaction.user.id;
+      const cooldownKey = `subscribe:${discordId}`;
+      if (subscribeCooldown.has(cooldownKey)) {
+        await interaction.reply({
+          ephemeral: true,
+          content: "Please wait a moment before trying again."
+        });
+        return;
+      }
+      subscribeCooldown.set(cooldownKey, true);
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const session = await createCheckoutSessionForDiscordUser({ discordId });
+        const url = session.url;
+        if (!url) throw new Error("Stripe did not return a Checkout URL.");
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setLabel("Open Checkout").setStyle(ButtonStyle.Link).setURL(url)
+        );
+
+        await interaction.editReply({
+          content: "Open Stripe Checkout to complete your subscription.",
+          components: [row]
+        });
+      } catch (err) {
+        console.error("[discord] subscribe button failed", err);
+        await interaction.editReply({
+          content: "Could not create a checkout session. Please try again later."
+        });
+      }
+      return;
+    }
+
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === "subscribe") {
+      const discordId = interaction.user.id;
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const session = await createCheckoutSessionForDiscordUser({ discordId });
+        const url = session.url;
+        if (!url) throw new Error("Stripe did not return a Checkout URL.");
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setLabel("Open Checkout").setStyle(ButtonStyle.Link).setURL(url)
+        );
+
+        await interaction.editReply({
+          content: "Open Stripe Checkout to complete your subscription.",
+          components: [row]
+        });
+      } catch (err) {
+        console.error("[discord] /subscribe failed", err);
+        await interaction.editReply({
+          content: "Could not create a checkout session. Please try again later."
+        });
+      }
+      return;
+    }
+
+    if (interaction.commandName === "post-subscribe") {
+      // Restricted via default_member_permissions at command registration time.
+      const channel = interaction.channel;
+      if (!channel) {
+        await interaction.reply({ ephemeral: true, content: "No channel available." });
+        return;
+      }
+      if (channel.type !== ChannelType.GuildText) {
+        await interaction.reply({ ephemeral: true, content: "Run this in a text channel." });
+        return;
+      }
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("subscribe:create")
+          .setLabel("Subscribe")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await channel.send({
+        content: "Click to subscribe and unlock Premium access:",
+        components: [row]
+      });
+
+      await interaction.reply({ ephemeral: true, content: "Posted the Subscribe button." });
+      return;
+    }
+  });
+
+  client.once(Events.ClientReady, async () => {
     state.readyAt = new Date();
 
     const guild = await getGuild();
@@ -139,6 +267,15 @@ export async function createDiscordBot() {
       {
         name: "status",
         description: "Shows subscriber count and bot health"
+      },
+      {
+        name: "subscribe",
+        description: "Start a Stripe subscription checkout"
+      },
+      {
+        name: "post-subscribe",
+        description: "Post a Subscribe button in this channel",
+        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()
       }
     ]);
 
@@ -165,4 +302,3 @@ export async function createDiscordBot() {
     client
   };
 }
-
