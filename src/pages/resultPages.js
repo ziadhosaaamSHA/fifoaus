@@ -224,29 +224,144 @@ export function renderResultPage({
 
 export function renderLandingPage(cfg) {
   const safeSupport = cfg?.SUPPORT_TEXT ? escapeHtml(cfg.SUPPORT_TEXT) : null;
+
   return `<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Subscribe to Premium</title>
-    <style>\${baseStyles()}</style>
-  </head>
-  <body>
-    <div class="shell sparkles">
-      <div class="card">
-        <h1>Unlock Premium Access</h1>
-        <p>Subscribe to get exclusive access and features in our Discord server.</p>
-        <div class="row">
-          <a class="btn primary" href="/auth/discord">Login with Discord</a>
-        </div>
-        \${
-          safeSupport
-            ? \`<p class="meta">Need help? \${safeSupport}</p>\`
-            : \`<p class="meta">Make sure you are a member of the server before subscribing.</p>\`
-        }
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unlock Premium</title>
+
+  <style>
+    ${baseStyles()}
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, #0f172a, #020617);
+      color: #e5e7eb;
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      max-width: 460px;
+      width: 100%;
+      padding: 40px 32px;
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      text-align: center;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(99,102,241,0.1);
+      color: #a5b4fc;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin: 0 0 12px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      margin: 0 0 24px;
+      color: #9ca3af;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    .features {
+      text-align: left;
+      margin-bottom: 28px;
+    }
+
+    .features div {
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: #d1d5db;
+    }
+
+    .features span {
+      color: #818cf8;
+      margin-right: 8px;
+    }
+
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      font-weight: 500;
+      font-size: 15px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      box-shadow: 0 10px 25px rgba(99,102,241,0.35);
+    }
+
+    .btn.primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(99,102,241,0.45);
+    }
+
+    .meta {
+      margin-top: 18px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+    <div class="card">
+
+      <div class="badge">Premium Access</div>
+
+      <h1>Join the Inner Circle</h1>
+
+      <p>
+        Get exclusive roles, private channels, and premium perks inside our Discord community.
+      </p>
+
+      <div class="features">
+        <div><span>✔</span> Exclusive Discord channels</div>
+        <div><span>✔</span> Priority support</div>
+        <div><span>✔</span> Members-only drops & updates</div>
       </div>
+
+      <a class="btn primary" href="/auth/discord">
+        Continue with Discord →
+      </a>
+
+      ${safeSupport
+      ? `<p class="meta">Need help? ${safeSupport}</p>`
+      : `<p class="meta">Make sure you're already in the Discord server before subscribing.</p>`
+    }
+
     </div>
-  </body>
+  </div>
+</body>
 </html>`;
 }
