@@ -357,7 +357,7 @@ export function renderLandingPage(cfg) {
 
       ${safeSupport
       ? `<p class="meta">Need help? ${safeSupport}</p>`
-      : `<p class="meta">Make sure you're already in the Discord server before subscribing.</p>`
+      : `<p class="meta">You will be securely connected and added to the Discord server.</p>`
     }
 
     </div>

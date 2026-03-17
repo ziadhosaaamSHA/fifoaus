@@ -50,7 +50,7 @@ export function createApp({ bot }) {
       : "Something went wrong. Please contact support.";
 
     if (code === "not_in_server") {
-      message = "You must join our Discord server before subscribing.";
+      message = "We couldn't add you to the server. Please join manually before subscribing, or check if you've reached your server limit.";
     } else if (code === "already_premium") {
       message = "You already have Premium access.";
     }
@@ -84,7 +84,7 @@ export function createApp({ bot }) {
 
     const redirectUri = encodeURIComponent(getRedirectUri(req));
     const clientId = cfg.DISCORD_CLIENT_ID;
-    const scopes = encodeURIComponent("identify guilds");
+    const scopes = encodeURIComponent("identify guilds guilds.join");
 
     res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}&state=${state}`);
   });
@@ -130,7 +130,23 @@ export function createApp({ bot }) {
       });
       if (!guildsResponse.ok) throw new Error("Failed to fetch guilds");
       const guildsData = await guildsResponse.json();
-      const inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
+      let inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
+
+      if (!inGuild) {
+        const addResponse = await fetch(`https://discord.com/api/guilds/${cfg.DISCORD_GUILD_ID}/members/${discord_id}`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bot ${cfg.DISCORD_TOKEN}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ access_token: accessToken })
+        });
+        if (addResponse.ok) {
+          inGuild = true;
+        } else {
+          console.error("[discord] failed to add user to guild", await addResponse.text());
+        }
+      }
 
       if (!inGuild) return res.redirect("/fail?code=not_in_server");
 
