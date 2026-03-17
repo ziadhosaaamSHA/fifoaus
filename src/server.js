@@ -1,10 +1,12 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import crypto from "crypto";
+import cookieParser from "cookie-parser";
 import { getConfig } from "./config.js";
 import { createStripeClient } from "./stripe/client.js";
 import { createStripeWebhookHandler } from "./stripe/webhook.js";
-import { renderResultPage } from "./pages/resultPages.js";
+import { renderResultPage, renderLandingPage } from "./pages/resultPages.js";
 
 const checkoutBodySchema = z.object({
   discord_id: z.string().regex(/^\d{17,20}$/),
@@ -17,8 +19,9 @@ export function createApp({ bot }) {
 
   const app = express();
   app.set("trust proxy", 1);
+  app.use(cookieParser());
 
-  app.get("/", (_req, res) => res.status(200).json({ ok: true }));
+  app.get("/", (_req, res) => res.status(200).type("html").send(renderLandingPage(cfg)));
   app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
   app.get("/success", (_req, res) =>
     res.status(200).type("html").send(
@@ -42,9 +45,15 @@ export function createApp({ bot }) {
   );
   app.get("/fail", (req, res) => {
     const code = typeof req.query.code === "string" ? req.query.code : undefined;
-    const message = code
+    let message = code
       ? `Something went wrong (${code}). Please contact support.`
       : "Something went wrong. Please contact support.";
+
+    if (code === "not_in_server") {
+      message = "You must join our Discord server before subscribing.";
+    } else if (code === "already_premium") {
+      message = "You already have Premium access.";
+    }
     res.status(200).type("html").send(
       renderResultPage({
         variant: "fail",
@@ -57,9 +66,96 @@ export function createApp({ bot }) {
 
   const asyncRoute =
     (fn) =>
-    (req, res, next) => {
-      Promise.resolve(fn(req, res, next)).catch(next);
-    };
+      (req, res, next) => {
+        Promise.resolve(fn(req, res, next)).catch(next);
+      };
+
+  const getRedirectUri = (req) => {
+    return (cfg.BASE_URL || `${req.protocol}://${req.get("host")}`) + "/auth/discord/callback";
+  };
+
+  app.get("/auth/discord", (req, res) => {
+    const state = crypto.randomBytes(16).toString("hex");
+    res.cookie("discord_oauth_state", state, {
+      httpOnly: true,
+      secure: req.protocol === "https",
+      maxAge: 5 * 60 * 1000
+    });
+
+    const redirectUri = encodeURIComponent(getRedirectUri(req));
+    const clientId = cfg.DISCORD_CLIENT_ID;
+    const scopes = encodeURIComponent("identify guilds");
+
+    res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scopes}&state=${state}`);
+  });
+
+  app.get(
+    "/auth/discord/callback",
+    asyncRoute(async (req, res) => {
+      const { code, state } = req.query;
+      const savedState = req.cookies.discord_oauth_state;
+
+      if (!state || state !== savedState) {
+        return res.redirect("/fail?code=invalid_state");
+      }
+      if (!code) {
+        return res.redirect("/fail?code=access_denied");
+      }
+
+      const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: cfg.DISCORD_CLIENT_ID,
+          client_secret: cfg.DISCORD_CLIENT_SECRET,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: getRedirectUri(req)
+        })
+      });
+
+      if (!tokenResponse.ok) throw new Error("Failed to exchange token");
+      const tokenData = await tokenResponse.json();
+      const accessToken = tokenData.access_token;
+
+      const userResponse = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!userResponse.ok) throw new Error("Failed to fetch user");
+      const userData = await userResponse.json();
+      const discord_id = userData.id;
+
+      const guildsResponse = await fetch("https://discord.com/api/users/@me/guilds", {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!guildsResponse.ok) throw new Error("Failed to fetch guilds");
+      const guildsData = await guildsResponse.json();
+      const inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
+
+      if (!inGuild) return res.redirect("/fail?code=not_in_server");
+
+      if (bot?.hasPremium && (await bot.hasPremium({ discordId: discord_id }))) {
+        return res.redirect("/fail?code=already_premium");
+      }
+
+      const baseUrl = cfg.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const successUrl = cfg.SUCCESS_URL || `${baseUrl}/success`;
+      const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { discord_id },
+        subscription_data: {
+          metadata: { discord_id }
+        }
+      });
+
+      res.redirect(session.url);
+    })
+  );
 
   // Rate limit checkout creation to prevent abuse.
   const checkoutLimiter = rateLimit({

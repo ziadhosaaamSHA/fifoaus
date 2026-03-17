@@ -16,6 +16,8 @@ const configSchema = z.object({
     .regex(/^price_[a-zA-Z0-9]+$/, "invalid Stripe price id"),
 
   DISCORD_TOKEN: z.string().min(1),
+  DISCORD_CLIENT_ID: discordIdSchema,
+  DISCORD_CLIENT_SECRET: z.string().min(1),
   DISCORD_GUILD_ID: discordIdSchema,
   DISCORD_PREMIUM_ROLE_ID: discordIdSchema,
   DISCORD_SUBSCRIBER_VOICE_CHANNEL_ID: discordIdSchema.optional().or(z.literal(""))

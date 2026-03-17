@@ -211,12 +211,40 @@ export function renderResultPage({
         </div>
         <h1>${safeTitle}</h1>
         <p>${safeMessage}</p>
-        ${
-          safeSupport
-            ? `<p class="meta">Need help? ${safeSupport}</p>`
-            : `<p class="meta">Need help? Contact support in the Discord server.</p>`
-        }
+        ${safeSupport
+      ? `<p class="meta">Need help? ${safeSupport}</p>`
+      : `<p class="meta">Need help? Contact support in the Discord server.</p>`
+    }
         ${row}
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
+export function renderLandingPage(cfg) {
+  const safeSupport = cfg?.SUPPORT_TEXT ? escapeHtml(cfg.SUPPORT_TEXT) : null;
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Subscribe to Premium</title>
+    <style>\${baseStyles()}</style>
+  </head>
+  <body>
+    <div class="shell sparkles">
+      <div class="card">
+        <h1>Unlock Premium Access</h1>
+        <p>Subscribe to get exclusive access and features in our Discord server.</p>
+        <div class="row">
+          <a class="btn primary" href="/auth/discord">Login with Discord</a>
+        </div>
+        \${
+          safeSupport
+            ? \`<p class="meta">Need help? \${safeSupport}</p>\`
+            : \`<p class="meta">Make sure you are a member of the server before subscribing.</p>\`
+        }
       </div>
     </div>
   </body>
