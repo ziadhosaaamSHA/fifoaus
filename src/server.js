@@ -103,6 +103,8 @@ export function createApp({ bot }) {
     return (cfg.BASE_URL || `${req.protocol}://${req.get("host")}`) + "/auth/discord/callback";
   };
 
+  const stripTrailingSlash = (url) => (url.endsWith("/") ? url.slice(0, -1) : url);
+
   app.get(
     "/invite/:token",
     asyncRoute(async (req, res) => {
@@ -228,7 +230,7 @@ export function createApp({ bot }) {
         return res.redirect("/fail?code=already_premium");
       }
 
-      const baseUrl = cfg.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const baseUrl = stripTrailingSlash(cfg.BASE_URL || `${req.protocol}://${req.get("host")}`);
       const successUrl = cfg.SUCCESS_URL || `${baseUrl}/success`;
       const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
 
@@ -270,7 +272,7 @@ export function createApp({ bot }) {
       }
 
       // Stripe requires absolute URLs. Prefer explicit env vars, otherwise derive from the request host.
-      const baseUrl = cfg.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const baseUrl = stripTrailingSlash(cfg.BASE_URL || `${req.protocol}://${req.get("host")}`);
       const successUrl = cfg.SUCCESS_URL || `${baseUrl}/success`;
       const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
 

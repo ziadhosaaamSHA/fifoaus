@@ -194,6 +194,10 @@ export async function createDiscordBot() {
     });
   }
 
+  function stripTrailingSlash(url) {
+    return url.endsWith("/") ? url.slice(0, -1) : url;
+  }
+
   client.on(Events.GuildMemberAdd, async (member) => {
     if (member.guild?.id !== cfg.DISCORD_GUILD_ID) return;
 
@@ -286,7 +290,7 @@ export async function createDiscordBot() {
           }
 
           const token = await createInviteToken({ maxUses: 1 });
-          const inviteUrl = `${cfg.BASE_URL.replace(/\\/$/, "")}/invite/${token}`;
+          const inviteUrl = `${stripTrailingSlash(cfg.BASE_URL)}/invite/${token}`;
 
           await interaction.editReply({
             content: `One-time access link generated:\n${inviteUrl}\nThis link works once.`

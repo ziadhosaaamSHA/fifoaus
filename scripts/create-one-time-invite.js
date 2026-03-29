@@ -51,6 +51,9 @@ const cfg = getConfig();
 
 const discordId = args["discord-id"] || args.discordId;
 const skipSubCheck = Boolean(args["skip-sub-check"] || args.skipSubCheck);
+function stripTrailingSlash(url) {
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
 if (!cfg.BASE_URL) {
   console.error("Missing BASE_URL. Set it to your public app URL.");
   process.exit(1);
@@ -71,7 +74,7 @@ if (!isDbEnabled()) {
 }
 
 const token = await createInviteToken({ discordId: isDiscordId(discordId) ? discordId : null });
-const inviteUrl = `${cfg.BASE_URL.replace(/\\/$/, "")}/invite/${token}`;
+const inviteUrl = `${stripTrailingSlash(cfg.BASE_URL)}/invite/${token}`;
 
 console.log(`Invite URL: ${inviteUrl}`);
 console.log(`Invite token: ${token}`);
