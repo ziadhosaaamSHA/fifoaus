@@ -68,15 +68,17 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
                 console.warn("[db] failed to upsert from checkout session", err?.message || err);
               }
             } else {
-              await upsertSubscriber({
-                discordId,
-                status: "active",
-                currentPeriodEnd: null,
-                stripeCustomerId: session?.customer || null,
-                stripeSubscriptionId: subscriptionId || null
-              }).catch((err) => {
+              try {
+                await upsertSubscriber({
+                  discordId,
+                  status: "active",
+                  currentPeriodEnd: null,
+                  stripeCustomerId: session?.customer || null,
+                  stripeSubscriptionId: subscriptionId || null
+                });
+              } catch (err) {
                 console.warn("[db] failed to upsert from checkout session", err?.message || err);
-              });
+              }
             }
           }
           await bot.grantPremium({ discordId, accessToken, reason: "checkout.session.completed" });
@@ -92,7 +94,11 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
             return;
           }
           if (isDbEnabled()) {
-            await upsertSubscriberFromSubscription({ discordId, subscription });
+            try {
+              await upsertSubscriberFromSubscription({ discordId, subscription });
+            } catch (err) {
+              console.warn("[db] failed to upsert subscription", err?.message || err);
+            }
           }
           return;
         }
@@ -105,7 +111,11 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
             return;
           }
           if (isDbEnabled()) {
-            await upsertSubscriberFromSubscription({ discordId, subscription });
+            try {
+              await upsertSubscriberFromSubscription({ discordId, subscription });
+            } catch (err) {
+              console.warn("[db] failed to upsert subscription", err?.message || err);
+            }
           }
           await bot.revokePremium({ discordId, reason: "customer.subscription.deleted" });
           return;
@@ -120,7 +130,11 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
           }
           const { discordId, subscription } = resolved;
           if (isDbEnabled()) {
-            await upsertSubscriberFromSubscription({ discordId, subscription });
+            try {
+              await upsertSubscriberFromSubscription({ discordId, subscription });
+            } catch (err) {
+              console.warn("[db] failed to upsert subscription", err?.message || err);
+            }
           }
           await bot.revokePremium({ discordId, reason: "invoice.payment_failed" });
           return;
