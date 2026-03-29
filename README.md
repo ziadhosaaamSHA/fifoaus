@@ -1,4 +1,4 @@
-# Paid Discord Server (No DB)
+# Paid Discord Server
 
 Single Node.js service that:
 
@@ -35,7 +35,7 @@ The bot can create a Checkout session for the user who clicks a button.
 - `/post-subscribe` (Manage Server) posts a "Subscribe" button in the current channel.
 - When a user clicks it, the bot creates a Checkout session using their Discord user ID and replies with an ephemeral "Open Checkout" link.
 - `/subscribe` is the same flow but as a command.
-- `/post-invite` (Manage Server) posts a "Get Premium Access" button that returns a single-use invite link for existing subscribers. The invite is created from the same channel the button lives in (so run it inside the premium server).
+- `/post-invite` (Manage Server) replies with a private "Generate Invite Link" button for admins. It creates a one-time access link you can email to existing subscribers.
 
 Note: for this Discord-initiated checkout flow you must set `BASE_URL` (or explicit `SUCCESS_URL`/`CANCEL_URL`) so Stripe gets absolute redirect URLs.
 
@@ -43,17 +43,37 @@ Note: for this Discord-initiated checkout flow you must set `BASE_URL` (or expli
 
 Expose locally (example): `stripe listen --forward-to localhost:3000/stripe/webhook`
 
-## One-time invite (existing subscribers)
+## Database (Postgres)
 
-Create a single-use Discord invite for a subscriber who is active in Stripe but not yet in the server:
+Set `DATABASE_URL`. The app uses a `subscribers` table with:
+
+- `discord_id` (PK)
+- `stripe_customer_id`
+- `stripe_subscription_id`
+- `status` (e.g. `active`, `trialing`, `canceled`, `past_due`)
+- `current_period_end`
+- `updated_at`
+
+It also uses an `invite_tokens` table with:
+
+- `token` (PK)
+- `discord_id` (nullable; optional binding)
+- `max_uses`
+- `uses`
+- `created_at`
+- `used_at`
+
+## One-time access link (existing subscribers)
+
+Create a single-use access link (token-based) that routes through OAuth:
 
 ```bash
-npm run invite:one-time -- --discord-id 123456789012345678 --channel-id 123456789012345678
+npm run invite:one-time -- --discord-id 123456789012345678
 ```
 
-By default the invite never expires (but only works once). You can add `--max-age 86400` for a 24-hour expiry.
+If you omit `--discord-id`, the link can be redeemed by any Discord account with an active subscription.
 
-## Notes (No DB)
+## Notes
 
 - Discord ID is stored in Stripe metadata (`session.metadata.discord_id` and `subscription.metadata.discord_id`). This is how webhooks map back to a member without a database.
 - The bot needs the `GuildMembers` privileged intent enabled in the Discord Developer Portal to reliably fetch members for role changes/counting.

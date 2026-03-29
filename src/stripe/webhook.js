@@ -1,4 +1,9 @@
 import { createStripeEventDedupeCache } from "./idempotency.js";
+import {
+  isDbEnabled,
+  upsertSubscriber,
+  upsertSubscriberFromSubscription
+} from "../db/subscribers.js";
 
 const processedEvents = createStripeEventDedupeCache();
 const inflight = new Map();
@@ -9,13 +14,13 @@ function getHeader(req, name) {
   return value;
 }
 
-async function resolveDiscordIdFromInvoice({ stripe, invoice }) {
+async function resolveSubscriptionFromInvoice({ stripe, invoice }) {
   const subId = invoice?.subscription;
   if (!subId || typeof subId !== "string") return null;
   const subscription = await stripe.subscriptions.retrieve(subId);
   const discordId = subscription?.metadata?.discord_id;
   if (typeof discordId !== "string" || !/^\d{17,20}$/.test(discordId)) return null;
-  return discordId;
+  return { discordId, subscription };
 }
 
 export function createStripeWebhookHandler({ cfg, stripe, bot }) {
@@ -53,7 +58,42 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
             console.warn("[stripe] session missing discord_id metadata", session?.id);
             return;
           }
+          if (isDbEnabled()) {
+            const subscriptionId = session?.subscription;
+            if (typeof subscriptionId === "string") {
+              try {
+                const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+                await upsertSubscriberFromSubscription({ discordId, subscription });
+              } catch (err) {
+                console.warn("[db] failed to upsert from checkout session", err?.message || err);
+              }
+            } else {
+              await upsertSubscriber({
+                discordId,
+                status: "active",
+                currentPeriodEnd: null,
+                stripeCustomerId: session?.customer || null,
+                stripeSubscriptionId: subscriptionId || null
+              }).catch((err) => {
+                console.warn("[db] failed to upsert from checkout session", err?.message || err);
+              });
+            }
+          }
           await bot.grantPremium({ discordId, accessToken, reason: "checkout.session.completed" });
+          return;
+        }
+
+        case "customer.subscription.created":
+        case "customer.subscription.updated": {
+          const subscription = event.data.object;
+          const discordId = subscription?.metadata?.discord_id;
+          if (typeof discordId !== "string" || !/^\d{17,20}$/.test(discordId)) {
+            console.warn("[stripe] subscription missing discord_id metadata", subscription?.id);
+            return;
+          }
+          if (isDbEnabled()) {
+            await upsertSubscriberFromSubscription({ discordId, subscription });
+          }
           return;
         }
 
@@ -64,16 +104,23 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
             console.warn("[stripe] subscription missing discord_id metadata", subscription?.id);
             return;
           }
+          if (isDbEnabled()) {
+            await upsertSubscriberFromSubscription({ discordId, subscription });
+          }
           await bot.revokePremium({ discordId, reason: "customer.subscription.deleted" });
           return;
         }
 
         case "invoice.payment_failed": {
           const invoice = event.data.object;
-          const discordId = await resolveDiscordIdFromInvoice({ stripe, invoice });
-          if (!discordId) {
+          const resolved = await resolveSubscriptionFromInvoice({ stripe, invoice });
+          if (!resolved) {
             console.warn("[stripe] invoice.payment_failed: could not resolve discord_id", invoice?.id);
             return;
+          }
+          const { discordId, subscription } = resolved;
+          if (isDbEnabled()) {
+            await upsertSubscriberFromSubscription({ discordId, subscription });
           }
           await bot.revokePremium({ discordId, reason: "invoice.payment_failed" });
           return;
@@ -97,4 +144,3 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
     }
   };
 }
-

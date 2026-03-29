@@ -56,7 +56,7 @@ function baseStyles() {
       letter-spacing: -0.03em;
     }
     p { margin: 0; color: var(--fifo-ink-muted); }
-    .row { margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .row { margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
     a.btn {
       display: inline-flex;
       align-items: center;
@@ -250,10 +250,10 @@ export function renderLandingPage(cfg) {
     body {
       margin: 0;
       background:
-        radial-gradient(1200px 600px at 20% 10%, rgba(239, 134, 0, 0.18), rgba(20, 12, 1, 0) 60%),
-        radial-gradient(1000px 600px at 85% 5%, rgba(243, 170, 76, 0.12), rgba(20, 12, 1, 0) 55%),
-        linear-gradient(180deg, #140c01 0%, #0d0803 100%);
-      color: #fff6ea;
+        radial-gradient(1200px 700px at 18% 10%, rgba(239, 134, 0, 0.16), rgba(255, 247, 239, 0) 60%),
+        radial-gradient(1000px 650px at 85% 12%, rgba(243, 170, 76, 0.18), rgba(255, 247, 239, 0) 55%),
+        linear-gradient(180deg, #fff7ef 0%, #ffffff 100%);
+      color: #0d0803;
       font-family: "Instrument Sans", system-ui, -apple-system, sans-serif;
     }
 
@@ -270,10 +270,10 @@ export function renderLandingPage(cfg) {
       width: 100%;
       padding: 40px 32px;
       border-radius: 20px;
-      background: rgba(17, 10, 2, 0.7);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 246, 234, 0.1);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(13, 8, 3, 0.12);
+      box-shadow: 0 20px 60px rgba(13, 8, 3, 0.12);
       text-align: center;
     }
 
@@ -282,8 +282,8 @@ export function renderLandingPage(cfg) {
       font-size: 12px;
       padding: 6px 12px;
       border-radius: 999px;
-      background: linear-gradient(125deg, rgba(239, 134, 0, 0.2), rgba(243, 170, 76, 0.2));
-      color: #ffe0b5;
+      background: linear-gradient(125deg, rgba(239, 134, 0, 0.18), rgba(243, 170, 76, 0.18));
+      color: #c96300;
       margin-bottom: 16px;
       border: 1px solid rgba(239, 134, 0, 0.35);
     }
@@ -293,11 +293,12 @@ export function renderLandingPage(cfg) {
       margin: 0 0 12px;
       font-weight: 700;
       letter-spacing: -0.03em;
+      color: #0d0803;
     }
 
     p {
       margin: 0 0 24px;
-      color: rgba(255, 246, 234, 0.7);
+      color: rgba(13, 8, 3, 0.7);
       line-height: 1.6;
       font-size: 15px;
     }
@@ -310,11 +311,11 @@ export function renderLandingPage(cfg) {
     .features div {
       margin-bottom: 10px;
       font-size: 14px;
-      color: rgba(255, 246, 234, 0.85);
+      color: rgba(13, 8, 3, 0.8);
     }
 
     .features span {
-      color: #f3aa4c;
+      color: #ef8600;
       margin-right: 8px;
     }
 
@@ -343,7 +344,7 @@ export function renderLandingPage(cfg) {
     .meta {
       margin-top: 18px;
       font-size: 13px;
-      color: rgba(255, 246, 234, 0.55);
+      color: rgba(13, 8, 3, 0.55);
     }
 
   </style>

@@ -10,7 +10,8 @@ import {
 } from "discord.js";
 import { getConfig } from "../config.js";
 import { createStripeClient } from "../stripe/client.js";
-import { findActiveSubscriptionByDiscordId } from "../stripe/subscriptions.js";
+import { createInviteToken, isDbEnabled as isInviteDbEnabled } from "../db/inviteTokens.js";
+import { verifyActiveSubscriber } from "../subscribers/verify.js";
 import { LRUCache } from "lru-cache";
 
 function sleep(ms) {
@@ -193,51 +194,12 @@ export async function createDiscordBot() {
     });
   }
 
-  async function createOneTimeInvite({ channelId, reason, maxAge = 0 }) {
-    if (!channelId) {
-      throw new Error("Missing channelId for invite creation");
-    }
-
-    const headers = {
-      Authorization: `Bot ${cfg.DISCORD_TOKEN}`,
-      "Content-Type": "application/json"
-    };
-    if (reason) {
-      headers["X-Audit-Log-Reason"] = encodeURIComponent(reason);
-    }
-
-    const res = await fetch(
-      `https://discord.com/api/v10/channels/${channelId}/invites`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          max_age: maxAge,
-          max_uses: 1,
-          temporary: false,
-          unique: true
-        })
-      }
-    );
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Invite create failed (${res.status}): ${text}`);
-    }
-
-    const data = await res.json();
-    return `https://discord.gg/${data.code}`;
-  }
-
   client.on(Events.GuildMemberAdd, async (member) => {
     if (member.guild?.id !== cfg.DISCORD_GUILD_ID) return;
 
     try {
-      const subscription = await findActiveSubscriptionByDiscordId({
-        stripe,
-        discordId: member.id
-      });
-      if (!subscription) {
+      const verified = await verifyActiveSubscriber({ stripe, discordId: member.id });
+      if (!verified.active) {
         console.log("[discord] member joined without active subscription", member.id);
         return;
       }
@@ -300,51 +262,34 @@ export async function createDiscordBot() {
         }
         inviteCooldown.set(cooldownKey, true);
 
-        if (!interaction.guildId || interaction.guildId !== cfg.DISCORD_GUILD_ID) {
-          await interaction.reply({
-            ephemeral: true,
-            content: "This access button must be used inside the Premium server."
-          });
-          return;
-        }
-        if (!interaction.channel) {
-          await interaction.reply({
-            ephemeral: true,
-            content: "No channel available to create an invite."
-          });
-          return;
-        }
-
         await interaction.deferReply({ ephemeral: true });
         try {
-          const subscription = await findActiveSubscriptionByDiscordId({
-            stripe,
-            discordId
-          });
-          if (!subscription) {
+          if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
             await interaction.editReply({
-              content:
-                "No active subscription found for your Discord account. If this is a mistake, contact support."
+              content: "Only admins can generate invite links."
             });
             return;
           }
 
-          const member = await getGuild().then((g) => g.members.fetch(discordId)).catch(() => null);
-          if (member) {
-            await grantPremium({ discordId, reason: "invite:create" });
+          if (!isInviteDbEnabled()) {
             await interaction.editReply({
-              content: "You are already in the server. Premium access has been enabled."
+              content: "DATABASE_URL is not configured. Cannot generate invite links."
             });
             return;
           }
 
-          const inviteUrl = await createOneTimeInvite({
-            channelId: interaction.channel?.id,
-            reason: `invite for ${discordId}`
-          });
+          if (!cfg.BASE_URL) {
+            await interaction.editReply({
+              content: "Set BASE_URL in your env to generate invite links."
+            });
+            return;
+          }
+
+          const token = await createInviteToken({ maxUses: 1 });
+          const inviteUrl = `${cfg.BASE_URL.replace(/\\/$/, "")}/invite/${token}`;
 
           await interaction.editReply({
-            content: `Here is your one-time access link: ${inviteUrl}\nThis link works once.`
+            content: `One-time access link generated:\n${inviteUrl}\nThis link works once.`
           });
         } catch (err) {
           console.error("[discord] invite button failed", err);
@@ -408,29 +353,18 @@ export async function createDiscordBot() {
     }
 
     if (interaction.commandName === "post-invite") {
-      const channel = interaction.channel;
-      if (!channel) {
-        await interaction.reply({ ephemeral: true, content: "No channel available." });
-        return;
-      }
-      if (channel.type !== ChannelType.GuildText) {
-        await interaction.reply({ ephemeral: true, content: "Run this in a text channel." });
-        return;
-      }
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("invite:create")
-          .setLabel("Get Premium Access")
+          .setLabel("Generate Invite Link")
           .setStyle(ButtonStyle.Primary)
       );
 
-      await channel.send({
-        content: "Already subscribed? Click below to get your one-time access link:",
+      await interaction.reply({
+        ephemeral: true,
+        content: "Admins: click below to generate a one-time access link for email.",
         components: [row]
       });
-
-      await interaction.reply({ ephemeral: true, content: "Posted the access button." });
       return;
     }
 

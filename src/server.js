@@ -7,6 +7,12 @@ import { getConfig } from "./config.js";
 import { createStripeClient } from "./stripe/client.js";
 import { createStripeWebhookHandler } from "./stripe/webhook.js";
 import { renderResultPage, renderLandingPage } from "./pages/resultPages.js";
+import { verifyActiveSubscriber } from "./subscribers/verify.js";
+import {
+  getInviteToken,
+  consumeInviteToken,
+  isDbEnabled as isInviteDbEnabled
+} from "./db/inviteTokens.js";
 
 const checkoutBodySchema = z.object({
   discord_id: z.string().regex(/^\d{17,20}$/),
@@ -43,21 +49,44 @@ export function createApp({ bot }) {
       })
     )
   );
+  app.get("/invite/success", (_req, res) =>
+    res.status(200).type("html").send(
+      renderResultPage({
+        variant: "success",
+        title: "Access Granted",
+        message: "You're all set. Premium access has been enabled in the Discord server.",
+        supportText: cfg.SUPPORT_TEXT
+      })
+    )
+  );
   app.get("/fail", (req, res) => {
     const code = typeof req.query.code === "string" ? req.query.code : undefined;
     let message = code
       ? `Something went wrong (${code}). Please contact support.`
       : "Something went wrong. Please contact support.";
+    let title = "Payment Error";
 
     if (code === "not_in_server") {
       message = "We couldn't add you to the server. Please join manually before subscribing, or check if you've reached your server limit.";
     } else if (code === "already_premium") {
       message = "You already have Premium access.";
+    } else if (code === "invite_invalid") {
+      message = "This access link is invalid or has already been used.";
+      title = "Access Error";
+    } else if (code === "invite_unavailable") {
+      message = "Access links are temporarily unavailable. Please contact support.";
+      title = "Access Error";
+    } else if (code === "invite_user_mismatch") {
+      message = "This access link was generated for a different Discord account.";
+      title = "Access Error";
+    } else if (code === "not_subscribed") {
+      message = "No active subscription was found for your Discord account.";
+      title = "Access Error";
     }
     res.status(200).type("html").send(
       renderResultPage({
         variant: "fail",
-        title: "Payment Error",
+        title,
         message,
         supportText: cfg.SUPPORT_TEXT
       })
@@ -73,6 +102,33 @@ export function createApp({ bot }) {
   const getRedirectUri = (req) => {
     return (cfg.BASE_URL || `${req.protocol}://${req.get("host")}`) + "/auth/discord/callback";
   };
+
+  app.get(
+    "/invite/:token",
+    asyncRoute(async (req, res) => {
+      const token = req.params.token;
+      if (!token) return res.redirect("/fail?code=invite_invalid");
+      if (!isInviteDbEnabled()) return res.redirect("/fail?code=invite_unavailable");
+
+      const invite = await getInviteToken({ token });
+      if (!invite || invite.uses >= invite.max_uses) {
+        return res.redirect("/fail?code=invite_invalid");
+      }
+
+      res.cookie("invite_token", token, {
+        httpOnly: true,
+        secure: req.protocol === "https",
+        maxAge: 10 * 60 * 1000
+      });
+      res.cookie("discord_oauth_mode", "invite", {
+        httpOnly: true,
+        secure: req.protocol === "https",
+        maxAge: 10 * 60 * 1000
+      });
+
+      return res.redirect("/auth/discord");
+    })
+  );
 
   app.get("/auth/discord", (req, res) => {
     const state = crypto.randomBytes(16).toString("hex");
@@ -131,6 +187,42 @@ export function createApp({ bot }) {
       if (!guildsResponse.ok) throw new Error("Failed to fetch guilds");
       const guildsData = await guildsResponse.json();
       const inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
+
+      const oauthMode = req.cookies.discord_oauth_mode;
+      const inviteToken = req.cookies.invite_token;
+
+      if (oauthMode === "invite" && inviteToken) {
+        res.clearCookie("discord_oauth_mode");
+        res.clearCookie("invite_token");
+        res.clearCookie("discord_oauth_state");
+
+        if (!isInviteDbEnabled()) {
+          return res.redirect("/fail?code=invite_unavailable");
+        }
+
+        const invite = await getInviteToken({ token: inviteToken });
+        if (!invite || invite.uses >= invite.max_uses) {
+          return res.redirect("/fail?code=invite_invalid");
+        }
+
+        if (invite.discord_id && invite.discord_id !== discord_id) {
+          return res.redirect("/fail?code=invite_user_mismatch");
+        }
+
+        const verified = await verifyActiveSubscriber({ stripe, discordId: discord_id });
+        if (!verified.active) {
+          return res.redirect("/fail?code=not_subscribed");
+        }
+
+        const consumed = await consumeInviteToken({ token: inviteToken });
+        if (!consumed) {
+          return res.redirect("/fail?code=invite_invalid");
+        }
+
+        await bot.grantPremium({ discordId: discord_id, accessToken, reason: "invite:oauth" });
+
+        return res.redirect("/invite/success");
+      }
 
       if (inGuild && bot?.hasPremium && (await bot.hasPremium({ discordId: discord_id }))) {
         return res.redirect("/fail?code=already_premium");
