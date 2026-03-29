@@ -16,7 +16,7 @@ export async function getSubscriberByDiscordId({ discordId }) {
     `
     SELECT discord_id, status, stripe_subscription_id, stripe_customer_id, current_period_end
     FROM subscribers
-    WHERE discord_id = $1
+    WHERE discord_id::text = $1
     LIMIT 1
     `,
     [discordId]

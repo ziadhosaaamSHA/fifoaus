@@ -212,6 +212,9 @@ export function createApp({ bot }) {
         }
 
         const verified = await verifyActiveSubscriber({ stripe, discordId: discord_id });
+        if (verified.error) {
+          return res.redirect("/fail?code=invite_unavailable");
+        }
         if (!verified.active) {
           return res.redirect("/fail?code=not_subscribed");
         }

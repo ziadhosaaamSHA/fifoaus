@@ -62,6 +62,10 @@ if (!cfg.BASE_URL) {
 if (!skipSubCheck && isDiscordId(discordId)) {
   const stripe = createStripeClient(cfg);
   const verified = await verifyActiveSubscriber({ stripe, discordId });
+  if (verified.error) {
+    console.error("Subscription verification unavailable:", verified.error);
+    process.exit(1);
+  }
   if (!verified.active) {
     console.error(`No active subscription found for discord_id=${discordId}`);
     process.exit(1);

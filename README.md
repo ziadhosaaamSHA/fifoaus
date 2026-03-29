@@ -47,7 +47,7 @@ Expose locally (example): `stripe listen --forward-to localhost:3000/stripe/webh
 
 Set `DATABASE_URL`. The app uses a `subscribers` table with:
 
-- `discord_id` (PK)
+- `discord_id` (PK, `TEXT` or `BIGINT` — Discord IDs don't fit 32-bit ints)
 - `stripe_customer_id`
 - `stripe_subscription_id`
 - `status` (e.g. `active`, `trialing`, `canceled`, `past_due`)
@@ -57,11 +57,18 @@ Set `DATABASE_URL`. The app uses a `subscribers` table with:
 It also uses an `invite_tokens` table with:
 
 - `token` (PK)
-- `discord_id` (nullable; optional binding)
+- `discord_id` (nullable, `TEXT` or `BIGINT`)
 - `max_uses`
 - `uses`
 - `created_at`
 - `used_at`
+
+If you already created the tables with `INTEGER`, run:
+
+```sql
+ALTER TABLE subscribers ALTER COLUMN discord_id TYPE TEXT;
+ALTER TABLE invite_tokens ALTER COLUMN discord_id TYPE TEXT;
+```
 
 ## One-time access link (existing subscribers)
 

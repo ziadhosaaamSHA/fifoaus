@@ -203,6 +203,10 @@ export async function createDiscordBot() {
 
     try {
       const verified = await verifyActiveSubscriber({ stripe, discordId: member.id });
+      if (verified.error) {
+        console.warn("[discord] verification unavailable on join", verified.error);
+        return;
+      }
       if (!verified.active) {
         console.log("[discord] member joined without active subscription", member.id);
         return;
