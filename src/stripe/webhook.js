@@ -48,11 +48,12 @@ export function createStripeWebhookHandler({ cfg, stripe, bot }) {
         case "checkout.session.completed": {
           const session = event.data.object;
           const discordId = session?.metadata?.discord_id;
+          const accessToken = session?.metadata?.discord_access_token;
           if (typeof discordId !== "string" || !/^\d{17,20}$/.test(discordId)) {
             console.warn("[stripe] session missing discord_id metadata", session?.id);
             return;
           }
-          await bot.grantPremium({ discordId, reason: "checkout.session.completed" });
+          await bot.grantPremium({ discordId, accessToken, reason: "checkout.session.completed" });
           return;
         }
 

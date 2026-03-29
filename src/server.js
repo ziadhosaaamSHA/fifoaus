@@ -28,7 +28,7 @@ export function createApp({ bot }) {
       renderResultPage({
         variant: "success",
         title: "Payment Successful",
-        message: "Thanks. If your Discord role doesn't update within a minute, contact support.",
+        message: "Thanks! You will be automatically added to the Discord server with Premium access. If you don't see it within a minute, contact support.",
         supportText: cfg.SUPPORT_TEXT
       })
     )
@@ -130,27 +130,9 @@ export function createApp({ bot }) {
       });
       if (!guildsResponse.ok) throw new Error("Failed to fetch guilds");
       const guildsData = await guildsResponse.json();
-      let inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
+      const inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
 
-      if (!inGuild) {
-        const addResponse = await fetch(`https://discord.com/api/guilds/${cfg.DISCORD_GUILD_ID}/members/${discord_id}`, {
-          method: "PUT",
-          headers: {
-            "Authorization": `Bot ${cfg.DISCORD_TOKEN}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ access_token: accessToken })
-        });
-        if (addResponse.ok) {
-          inGuild = true;
-        } else {
-          console.error("[discord] failed to add user to guild", await addResponse.text());
-        }
-      }
-
-      if (!inGuild) return res.redirect("/fail?code=not_in_server");
-
-      if (bot?.hasPremium && (await bot.hasPremium({ discordId: discord_id }))) {
+      if (inGuild && bot?.hasPremium && (await bot.hasPremium({ discordId: discord_id }))) {
         return res.redirect("/fail?code=already_premium");
       }
 
@@ -163,7 +145,7 @@ export function createApp({ bot }) {
         line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
         success_url: successUrl,
         cancel_url: cancelUrl,
-        metadata: { discord_id },
+        metadata: { discord_id, discord_access_token: accessToken },
         subscription_data: {
           metadata: { discord_id }
         }

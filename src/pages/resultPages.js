@@ -9,16 +9,27 @@ function escapeHtml(s) {
 
 function baseStyles() {
   return `
-    :root { color-scheme: light; }
+    @import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@300;400;500;600;700;800&display=swap");
+
+    :root {
+      color-scheme: light;
+      --fifo-orange: #ef8600;
+      --fifo-orange-light: #f3aa4c;
+      --fifo-ink: #0d0803;
+      --fifo-ink-muted: rgba(13, 8, 3, 0.68);
+      --fifo-cream: #fff7ef;
+      --fifo-card: #ffffff;
+      --fifo-border: rgba(13, 8, 3, 0.12);
+      --fifo-shadow: 0 24px 70px rgba(13, 8, 3, 0.12);
+    }
     body {
       margin: 0;
-      font: 16px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-      color: #0b1220;
+      font: 16px/1.55 "Instrument Sans", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      color: var(--fifo-ink);
       background:
-        radial-gradient(1200px 800px at 20% 10%, rgba(34, 211, 238, 0.22) 0%, rgba(255,255,255,0) 55%),
-        radial-gradient(1000px 650px at 85% 20%, rgba(99, 102, 241, 0.18) 0%, rgba(255,255,255,0) 55%),
-        radial-gradient(1200px 900px at 40% 95%, rgba(16, 185, 129, 0.12) 0%, rgba(255,255,255,0) 60%),
-        linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        radial-gradient(900px 600px at 15% 10%, rgba(239, 134, 0, 0.16) 0%, rgba(255, 247, 239, 0) 55%),
+        radial-gradient(900px 600px at 85% 12%, rgba(243, 170, 76, 0.18) 0%, rgba(255, 247, 239, 0) 55%),
+        linear-gradient(180deg, var(--fifo-cream) 0%, #ffffff 100%);
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -28,48 +39,49 @@ function baseStyles() {
     }
     .shell { width: 100%; max-width: 760px; position: relative; }
     .card {
-      background: rgba(255, 255, 255, 0.78);
-      border: 1px solid rgba(15, 23, 42, 0.12);
-      border-radius: 20px;
-      box-shadow: 0 22px 65px rgba(2, 6, 23, 0.12);
-      backdrop-filter: blur(10px);
-      padding: 26px 22px;
+      background: var(--fifo-card);
+      border: 1px solid var(--fifo-border);
+      border-radius: 18px;
+      box-shadow: var(--fifo-shadow);
+      padding: 28px 24px;
       transform: translateY(10px);
       opacity: 0;
       animation: card-in 550ms cubic-bezier(.2,.9,.2,1) forwards;
     }
     @keyframes card-in { to { transform: translateY(0); opacity: 1; } }
     h1 {
-      margin: 12px 0 6px;
-      font-size: 26px;
-      letter-spacing: -0.02em;
+      margin: 12px 0 8px;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
     }
-    p { margin: 0; color: rgba(2, 6, 23, 0.72); }
+    p { margin: 0; color: var(--fifo-ink-muted); }
     .row { margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap; }
     a.btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      padding: 11px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(15, 23, 42, 0.12);
+      padding: 12px 24px;
+      border-radius: 10px;
+      border: 1px solid var(--fifo-border);
       text-decoration: none;
-      font-weight: 700;
-      color: #0b1220;
-      background: rgba(255, 255, 255, 0.8);
+      font-weight: 600;
+      color: var(--fifo-ink);
+      background: #ffffff;
       transition: transform 120ms ease, box-shadow 120ms ease;
     }
     a.btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(2,6,23,0.10); }
     a.btn.primary {
       border: 0;
       color: white;
-      background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+      background: var(--fifo-orange);
+      box-shadow: 0 12px 25px rgba(239, 134, 0, 0.35);
     }
     .meta {
       margin-top: 14px;
       font-size: 13px;
-      color: rgba(2, 6, 23, 0.6);
+      color: rgba(13, 8, 3, 0.6);
     }
     .badge {
       display: inline-flex;
@@ -77,8 +89,8 @@ function baseStyles() {
       gap: 10px;
       padding: 10px 12px;
       border-radius: 999px;
-      border: 1px solid rgba(15,23,42,0.10);
-      background: rgba(255,255,255,0.75);
+      border: 1px solid rgba(239, 134, 0, 0.24);
+      background: linear-gradient(125deg, rgba(239, 134, 0, 0.16), rgba(243, 170, 76, 0.16));
       width: fit-content;
     }
     .icon-wrap {
@@ -87,9 +99,9 @@ function baseStyles() {
       display: grid;
       place-items: center;
       border-radius: 999px;
-      background: rgba(255,255,255,0.9);
-      border: 1px solid rgba(15,23,42,0.10);
-      box-shadow: 0 14px 30px rgba(2,6,23,0.10);
+      background: #fff6ea;
+      border: 1px solid rgba(239, 134, 0, 0.2);
+      box-shadow: 0 14px 30px rgba(239, 134, 0, 0.15);
       transform: scale(0.7);
       opacity: 0;
       animation: pop-in 520ms cubic-bezier(.34,1.56,.64,1.3) 120ms forwards;
@@ -120,10 +132,10 @@ function baseStyles() {
       position: absolute;
       inset: -120px -80px;
       background:
-        radial-gradient(circle at 15% 20%, rgba(56,189,248,0.35) 0 2px, transparent 3px),
-        radial-gradient(circle at 75% 28%, rgba(99,102,241,0.30) 0 2px, transparent 3px),
-        radial-gradient(circle at 35% 70%, rgba(34,197,94,0.22) 0 2px, transparent 3px),
-        radial-gradient(circle at 60% 78%, rgba(251,146,60,0.22) 0 2px, transparent 3px);
+        radial-gradient(circle at 15% 20%, rgba(239,134,0,0.35) 0 2px, transparent 3px),
+        radial-gradient(circle at 75% 28%, rgba(243,170,76,0.30) 0 2px, transparent 3px),
+        radial-gradient(circle at 35% 70%, rgba(20,12,1,0.18) 0 2px, transparent 3px),
+        radial-gradient(circle at 60% 78%, rgba(239,134,0,0.22) 0 2px, transparent 3px);
       opacity: 0;
       transform: translateY(12px);
       animation: shimmer 1200ms ease 250ms forwards;
@@ -147,25 +159,25 @@ function iconSvg({ variant }) {
   if (variant === "success") {
     return `
       <svg width="44" height="44" viewBox="0 0 72 72" aria-hidden="true">
-        <circle class="stroke draw-circle" cx="36" cy="36" r="28" stroke="#22c55e"></circle>
-        <path class="stroke draw-mark" d="M22 37.5 L32.5 48 L52 28.5" stroke="#16a34a"></path>
+        <circle class="stroke draw-circle" cx="36" cy="36" r="28" stroke="#ef8600"></circle>
+        <path class="stroke draw-mark" d="M22 37.5 L32.5 48 L52 28.5" stroke="#b65a00"></path>
       </svg>
     `;
   }
   if (variant === "fail") {
     return `
       <svg width="44" height="44" viewBox="0 0 72 72" aria-hidden="true">
-        <circle class="stroke draw-circle" cx="36" cy="36" r="28" stroke="#ef4444"></circle>
-        <path class="stroke draw-mark" d="M26 26 L46 46" stroke="#dc2626"></path>
-        <path class="stroke draw-mark" style="animation-delay: 820ms" d="M46 26 L26 46" stroke="#dc2626"></path>
+        <circle class="stroke draw-circle" cx="36" cy="36" r="28" stroke="#e5484d"></circle>
+        <path class="stroke draw-mark" d="M26 26 L46 46" stroke="#c7362f"></path>
+        <path class="stroke draw-mark" style="animation-delay: 820ms" d="M46 26 L26 46" stroke="#c7362f"></path>
       </svg>
     `;
   }
   // cancel / neutral
   return `
     <svg width="44" height="44" viewBox="0 0 72 72" aria-hidden="true">
-      <circle class="stroke draw-circle" cx="36" cy="36" r="28" stroke="#64748b"></circle>
-      <path class="stroke draw-mark" d="M26 36 H46" stroke="#475569"></path>
+      <circle class="stroke draw-circle" cx="36" cy="36" r="28" stroke="#6f675d"></circle>
+      <path class="stroke draw-mark" d="M26 36 H46" stroke="#4c4339"></path>
     </svg>
   `;
 }
@@ -206,7 +218,7 @@ export function renderResultPage({
         <div class="badge">
           <div class="icon-wrap">${iconSvg({ variant })}</div>
           <div>
-            <div style="font-weight:800; letter-spacing:-0.01em">${safeTitle}</div>
+            <div style="font-weight:800; letter-spacing:-0.02em">${safeTitle}</div>
           </div>
         </div>
         <h1>${safeTitle}</h1>
@@ -237,9 +249,12 @@ export function renderLandingPage(cfg) {
 
     body {
       margin: 0;
-      background: radial-gradient(circle at 20% 20%, #0f172a, #020617);
-      color: #e5e7eb;
-      font-family: Inter, system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(1200px 600px at 20% 10%, rgba(239, 134, 0, 0.18), rgba(20, 12, 1, 0) 60%),
+        radial-gradient(1000px 600px at 85% 5%, rgba(243, 170, 76, 0.12), rgba(20, 12, 1, 0) 55%),
+        linear-gradient(180deg, #140c01 0%, #0d0803 100%);
+      color: #fff6ea;
+      font-family: "Instrument Sans", system-ui, -apple-system, sans-serif;
     }
 
     .shell {
@@ -255,9 +270,9 @@ export function renderLandingPage(cfg) {
       width: 100%;
       padding: 40px 32px;
       border-radius: 20px;
-      background: rgba(15, 23, 42, 0.7);
+      background: rgba(17, 10, 2, 0.7);
       backdrop-filter: blur(16px);
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 1px solid rgba(255, 246, 234, 0.1);
       box-shadow: 0 20px 60px rgba(0,0,0,0.6);
       text-align: center;
     }
@@ -267,21 +282,22 @@ export function renderLandingPage(cfg) {
       font-size: 12px;
       padding: 6px 12px;
       border-radius: 999px;
-      background: rgba(99,102,241,0.1);
-      color: #a5b4fc;
+      background: linear-gradient(125deg, rgba(239, 134, 0, 0.2), rgba(243, 170, 76, 0.2));
+      color: #ffe0b5;
       margin-bottom: 16px;
+      border: 1px solid rgba(239, 134, 0, 0.35);
     }
 
     h1 {
-      font-size: 28px;
+      font-size: 30px;
       margin: 0 0 12px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
+      font-weight: 700;
+      letter-spacing: -0.03em;
     }
 
     p {
       margin: 0 0 24px;
-      color: #9ca3af;
+      color: rgba(255, 246, 234, 0.7);
       line-height: 1.6;
       font-size: 15px;
     }
@@ -294,11 +310,11 @@ export function renderLandingPage(cfg) {
     .features div {
       margin-bottom: 10px;
       font-size: 14px;
-      color: #d1d5db;
+      color: rgba(255, 246, 234, 0.85);
     }
 
     .features span {
-      color: #818cf8;
+      color: #f3aa4c;
       margin-right: 8px;
     }
 
@@ -314,20 +330,20 @@ export function renderLandingPage(cfg) {
     }
 
     .btn.primary {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      background: #ef8600;
       color: white;
-      box-shadow: 0 10px 25px rgba(99,102,241,0.35);
+      box-shadow: 0 10px 25px rgba(239, 134, 0, 0.35);
     }
 
     .btn.primary:hover {
       transform: translateY(-1px);
-      box-shadow: 0 14px 30px rgba(99,102,241,0.45);
+      box-shadow: 0 14px 30px rgba(239, 134, 0, 0.45);
     }
 
     .meta {
       margin-top: 18px;
       font-size: 13px;
-      color: #6b7280;
+      color: rgba(255, 246, 234, 0.55);
     }
 
   </style>
@@ -357,7 +373,7 @@ export function renderLandingPage(cfg) {
 
       ${safeSupport
       ? `<p class="meta">Need help? ${safeSupport}</p>`
-      : `<p class="meta">You will be securely connected and added to the Discord server.</p>`
+      : `<p class="meta">After subscribing, you will automatically join our Discord server with Premium access.</p>`
     }
 
     </div>

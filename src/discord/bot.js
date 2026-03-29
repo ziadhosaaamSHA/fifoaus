@@ -10,6 +10,7 @@ import {
 } from "discord.js";
 import { getConfig } from "../config.js";
 import { createStripeClient } from "../stripe/client.js";
+import { findActiveSubscriptionByDiscordId } from "../stripe/subscriptions.js";
 import { LRUCache } from "lru-cache";
 
 function sleep(ms) {
@@ -81,14 +82,42 @@ export async function createDiscordBot() {
     }
   }
 
-  async function grantPremium({ discordId, reason }) {
+  async function grantPremium({ discordId, accessToken, reason }) {
     const guild = await getGuild();
+
+    if (accessToken) {
+      try {
+        const addResponse = await fetch(`https://discord.com/api/v10/guilds/${cfg.DISCORD_GUILD_ID}/members/${discordId}`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bot ${cfg.DISCORD_TOKEN}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            access_token: accessToken,
+            roles: [cfg.DISCORD_PREMIUM_ROLE_ID]
+          })
+        });
+        if (!addResponse.ok) {
+          console.error("[discord] failed to add user with access token", await addResponse.text());
+        } else if (addResponse.status === 201) {
+          console.log(`[discord] Added user ${discordId} to guild via access token`);
+        }
+      } catch (err) {
+        console.error("[discord] error adding member with access token", err);
+      }
+    }
+
     const member = await guild.members.fetch(discordId).catch(() => null);
     if (!member) {
       console.warn("[discord] member not found for grantPremium", discordId);
       return;
     }
-    await member.roles.add(cfg.DISCORD_PREMIUM_ROLE_ID, reason);
+
+    if (!member.roles.cache.has(cfg.DISCORD_PREMIUM_ROLE_ID)) {
+      await member.roles.add(cfg.DISCORD_PREMIUM_ROLE_ID, reason).catch(() => null);
+    }
+
     try {
       await member.send(
         `Your subscription is active and Premium access has been enabled in **${guild.name}**.`
@@ -131,6 +160,11 @@ export async function createDiscordBot() {
     ttl: 60 * 1000
   });
 
+  const inviteCooldown = new LRUCache({
+    max: 50_000,
+    ttl: 60 * 1000
+  });
+
   async function createCheckoutSessionForDiscordUser({ discordId }) {
     if (await hasPremium({ discordId })) {
       const err = new Error("already_premium");
@@ -159,45 +193,168 @@ export async function createDiscordBot() {
     });
   }
 
-  client.on(Events.InteractionCreate, async (interaction) => {
-    if (interaction.isButton()) {
-      if (interaction.customId !== "subscribe:create") return;
+  async function createOneTimeInvite({ channelId, reason, maxAge = 0 }) {
+    if (!channelId) {
+      throw new Error("Missing channelId for invite creation");
+    }
 
-      const discordId = interaction.user.id;
-      const cooldownKey = `subscribe:${discordId}`;
-      if (subscribeCooldown.has(cooldownKey)) {
-        await interaction.reply({
-          ephemeral: true,
-          content: "Please wait a moment before trying again."
-        });
+    const headers = {
+      Authorization: `Bot ${cfg.DISCORD_TOKEN}`,
+      "Content-Type": "application/json"
+    };
+    if (reason) {
+      headers["X-Audit-Log-Reason"] = encodeURIComponent(reason);
+    }
+
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${channelId}/invites`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          max_age: maxAge,
+          max_uses: 1,
+          temporary: false,
+          unique: true
+        })
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Invite create failed (${res.status}): ${text}`);
+    }
+
+    const data = await res.json();
+    return `https://discord.gg/${data.code}`;
+  }
+
+  client.on(Events.GuildMemberAdd, async (member) => {
+    if (member.guild?.id !== cfg.DISCORD_GUILD_ID) return;
+
+    try {
+      const subscription = await findActiveSubscriptionByDiscordId({
+        stripe,
+        discordId: member.id
+      });
+      if (!subscription) {
+        console.log("[discord] member joined without active subscription", member.id);
         return;
       }
-      subscribeCooldown.set(cooldownKey, true);
+      await grantPremium({ discordId: member.id, reason: "guildMemberAdd:active_subscription" });
+    } catch (err) {
+      console.warn("[discord] failed to verify subscription on join", err?.message || err);
+    }
+  });
 
-      await interaction.deferReply({ ephemeral: true });
-      try {
-        const session = await createCheckoutSessionForDiscordUser({ discordId });
-        const url = session.url;
-        if (!url) throw new Error("Stripe did not return a Checkout URL.");
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isButton()) {
+      if (interaction.customId === "subscribe:create") {
+        const discordId = interaction.user.id;
+        const cooldownKey = `subscribe:${discordId}`;
+        if (subscribeCooldown.has(cooldownKey)) {
+          await interaction.reply({
+            ephemeral: true,
+            content: "Please wait a moment before trying again."
+          });
+          return;
+        }
+        subscribeCooldown.set(cooldownKey, true);
 
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setLabel("Open Checkout").setStyle(ButtonStyle.Link).setURL(url)
-        );
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const session = await createCheckoutSessionForDiscordUser({ discordId });
+          const url = session.url;
+          if (!url) throw new Error("Stripe did not return a Checkout URL.");
 
-        await interaction.editReply({
-          content: "Open Stripe Checkout to complete your subscription.",
-          components: [row]
-        });
-      } catch (err) {
-        if (err?.code === "already_premium" || err?.message === "already_premium") {
-          await interaction.editReply({ content: "You already have Premium access." });
-        } else {
-          console.error("[discord] subscribe button failed", err);
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel("Open Checkout").setStyle(ButtonStyle.Link).setURL(url)
+          );
+
           await interaction.editReply({
-            content: "Could not create a checkout session. Please try again later."
+            content: "Open Stripe Checkout to complete your subscription.",
+            components: [row]
+          });
+        } catch (err) {
+          if (err?.code === "already_premium" || err?.message === "already_premium") {
+            await interaction.editReply({ content: "You already have Premium access." });
+          } else {
+            console.error("[discord] subscribe button failed", err);
+            await interaction.editReply({
+              content: "Could not create a checkout session. Please try again later."
+            });
+          }
+        }
+        return;
+      }
+
+      if (interaction.customId === "invite:create") {
+        const discordId = interaction.user.id;
+        const cooldownKey = `invite:${discordId}`;
+        if (inviteCooldown.has(cooldownKey)) {
+          await interaction.reply({
+            ephemeral: true,
+            content: "Please wait a moment before trying again."
+          });
+          return;
+        }
+        inviteCooldown.set(cooldownKey, true);
+
+        if (!interaction.guildId || interaction.guildId !== cfg.DISCORD_GUILD_ID) {
+          await interaction.reply({
+            ephemeral: true,
+            content: "This access button must be used inside the Premium server."
+          });
+          return;
+        }
+        if (!interaction.channel) {
+          await interaction.reply({
+            ephemeral: true,
+            content: "No channel available to create an invite."
+          });
+          return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const subscription = await findActiveSubscriptionByDiscordId({
+            stripe,
+            discordId
+          });
+          if (!subscription) {
+            await interaction.editReply({
+              content:
+                "No active subscription found for your Discord account. If this is a mistake, contact support."
+            });
+            return;
+          }
+
+          const member = await getGuild().then((g) => g.members.fetch(discordId)).catch(() => null);
+          if (member) {
+            await grantPremium({ discordId, reason: "invite:create" });
+            await interaction.editReply({
+              content: "You are already in the server. Premium access has been enabled."
+            });
+            return;
+          }
+
+          const inviteUrl = await createOneTimeInvite({
+            channelId: interaction.channel?.id,
+            reason: `invite for ${discordId}`
+          });
+
+          await interaction.editReply({
+            content: `Here is your one-time access link: ${inviteUrl}\nThis link works once.`
+          });
+        } catch (err) {
+          console.error("[discord] invite button failed", err);
+          await interaction.editReply({
+            content: "Could not create an access link. Please try again later."
           });
         }
+        return;
       }
+
       return;
     }
 
@@ -215,8 +372,7 @@ export async function createDiscordBot() {
           `Subscribers: ${count}\n` +
           `Bot ready: ${state.readyAt ? state.readyAt.toISOString() : "no"}\n` +
           `Uptime: ${upSeconds}s\n` +
-          `Counter update: ${
-            state.lastCounterUpdateAt ? state.lastCounterUpdateAt.toISOString() : "n/a"
+          `Counter update: ${state.lastCounterUpdateAt ? state.lastCounterUpdateAt.toISOString() : "n/a"
           }`
       });
       return;
@@ -248,6 +404,33 @@ export async function createDiscordBot() {
           });
         }
       }
+      return;
+    }
+
+    if (interaction.commandName === "post-invite") {
+      const channel = interaction.channel;
+      if (!channel) {
+        await interaction.reply({ ephemeral: true, content: "No channel available." });
+        return;
+      }
+      if (channel.type !== ChannelType.GuildText) {
+        await interaction.reply({ ephemeral: true, content: "Run this in a text channel." });
+        return;
+      }
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("invite:create")
+          .setLabel("Get Premium Access")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await channel.send({
+        content: "Already subscribed? Click below to get your one-time access link:",
+        components: [row]
+      });
+
+      await interaction.reply({ ephemeral: true, content: "Posted the access button." });
       return;
     }
 
@@ -305,6 +488,11 @@ export async function createDiscordBot() {
       {
         name: "subscribe",
         description: "Start a Stripe subscription checkout"
+      },
+      {
+        name: "post-invite",
+        description: "Post a one-time access button for existing subscribers",
+        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()
       },
       {
         name: "post-subscribe",
