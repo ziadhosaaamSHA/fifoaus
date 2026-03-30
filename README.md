@@ -45,16 +45,7 @@ Expose locally (example): `stripe listen --forward-to localhost:3000/stripe/webh
 
 ## Database (Postgres)
 
-Set `DATABASE_URL`. The app uses a `subscribers` table with:
-
-- `discord_id` (PK, `TEXT` or `BIGINT` — Discord IDs don't fit 32-bit ints)
-- `stripe_customer_id`
-- `stripe_subscription_id`
-- `status` (e.g. `active`, `trialing`, `canceled`, `past_due`)
-- `current_period_end`
-- `updated_at`
-
-It also uses an `invite_tokens` table with:
+Set `DATABASE_URL`. The app uses an `invite_tokens` table with:
 
 - `token` (PK)
 - `discord_id` (nullable, `TEXT` or `BIGINT`)
@@ -63,7 +54,9 @@ It also uses an `invite_tokens` table with:
 - `created_at`
 - `used_at`
 
-If you already created the tables with `INTEGER`, run:
+Optional (for future reporting): a `subscribers` table can store Stripe status, but it is **not** used for access decisions.
+
+If you already created tables with `INTEGER`, run:
 
 ```sql
 ALTER TABLE subscribers ALTER COLUMN discord_id TYPE TEXT;
