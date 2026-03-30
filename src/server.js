@@ -7,7 +7,6 @@ import { getConfig } from "./config.js";
 import { createStripeClient } from "./stripe/client.js";
 import { createStripeWebhookHandler } from "./stripe/webhook.js";
 import { renderResultPage, renderLandingPage } from "./pages/resultPages.js";
-import { verifyActiveSubscriber } from "./subscribers/verify.js";
 import {
   getInviteToken,
   consumeInviteToken,
@@ -78,9 +77,6 @@ export function createApp({ bot }) {
       title = "Access Error";
     } else if (code === "invite_user_mismatch") {
       message = "This access link was generated for a different Discord account.";
-      title = "Access Error";
-    } else if (code === "not_subscribed") {
-      message = "No active subscription was found for your Discord account.";
       title = "Access Error";
     }
     res.status(200).type("html").send(
@@ -209,14 +205,6 @@ export function createApp({ bot }) {
 
         if (invite.discord_id && invite.discord_id !== discord_id) {
           return res.redirect("/fail?code=invite_user_mismatch");
-        }
-
-        const verified = await verifyActiveSubscriber({ stripe, discordId: discord_id });
-        if (verified.error) {
-          return res.redirect("/fail?code=invite_unavailable");
-        }
-        if (!verified.active) {
-          return res.redirect("/fail?code=not_subscribed");
         }
 
         const consumed = await consumeInviteToken({ token: inviteToken });
