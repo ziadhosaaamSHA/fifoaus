@@ -166,6 +166,24 @@ export async function createDiscordBot() {
     ttl: 60 * 1000
   });
 
+  function createInviteButtonRow() {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("invite:create")
+        .setLabel("Generate Invite Link")
+        .setStyle(ButtonStyle.Primary)
+    );
+  }
+
+  function createSubscribeButtonRow() {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("subscribe:create")
+        .setLabel("Subscribe")
+        .setStyle(ButtonStyle.Primary)
+    );
+  }
+
   async function createCheckoutSessionForDiscordUser({ discordId }) {
     if (await hasPremium({ discordId })) {
       const err = new Error("already_premium");
@@ -361,45 +379,134 @@ export async function createDiscordBot() {
     }
 
     if (interaction.commandName === "post-invite") {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("invite:create")
-          .setLabel("Generate Invite Link")
-          .setStyle(ButtonStyle.Primary)
-      );
+      const channel = interaction.channel;
+      const messageText = interaction.options.getString("text");
+      const messageId = interaction.options.getString("message_id");
 
-      await interaction.reply({
-        ephemeral: true,
-        content: "Admins: click below to generate a one-time access link for email.",
-        components: [row]
-      });
+      if (!channel || !channel.isTextBased() || !("send" in channel) || !("messages" in channel)) {
+        await interaction.reply({ ephemeral: true, content: "Run this in a text channel." });
+        return;
+      }
+
+      const row = createInviteButtonRow();
+
+      if (messageId) {
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const existingMessage = await channel.messages.fetch(messageId).catch(() => null);
+          if (!existingMessage) {
+            await interaction.editReply({ content: "Could not find that message in this channel." });
+            return;
+          }
+
+          if (existingMessage.author.id !== client.user.id) {
+            await interaction.editReply({
+              content: "I can only edit invite messages that were posted by this bot."
+            });
+            return;
+          }
+
+          await existingMessage.edit({
+            content: messageText || existingMessage.content,
+            components: [row]
+          });
+
+          await interaction.editReply({
+            content: `Updated the invite message.\nMessage ID: ${existingMessage.id}`
+          });
+        } catch (err) {
+          console.error("[discord] /post-invite edit failed", err);
+          await interaction.editReply({
+            content: "Could not edit that invite message. Please try again later."
+          });
+        }
+        return;
+      }
+
+      try {
+        const sentMessage = await channel.send({
+          content: messageText || "Admins: click below to generate a one-time access link for email.",
+          components: [row]
+        });
+
+        await interaction.reply({
+          ephemeral: true,
+          content: `Posted the invite message.\nMessage ID: ${sentMessage.id}`
+        });
+      } catch (err) {
+        console.error("[discord] /post-invite post failed", err);
+        await interaction.reply({
+          ephemeral: true,
+          content: "Could not post the invite message. Please try again later."
+        });
+      }
       return;
     }
 
     if (interaction.commandName === "post-subscribe") {
       const channel = interaction.channel;
-      if (!channel) {
-        await interaction.reply({ ephemeral: true, content: "No channel available." });
-        return;
-      }
-      if (channel.type !== ChannelType.GuildText) {
+      const messageText = interaction.options.getString("text");
+      const messageId = interaction.options.getString("message_id");
+
+      if (!channel || !channel.isTextBased() || !("send" in channel) || !("messages" in channel)) {
         await interaction.reply({ ephemeral: true, content: "Run this in a text channel." });
         return;
       }
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("subscribe:create")
-          .setLabel("Subscribe")
-          .setStyle(ButtonStyle.Primary)
-      );
+      const row = createSubscribeButtonRow();
 
-      await channel.send({
-        content: "Click to subscribe and unlock Premium access:",
-        components: [row]
-      });
+      if (messageId) {
+        await interaction.deferReply({ ephemeral: true });
 
-      await interaction.reply({ ephemeral: true, content: "Posted the Subscribe button." });
+        try {
+          const existingMessage = await channel.messages.fetch(messageId).catch(() => null);
+          if (!existingMessage) {
+            await interaction.editReply({ content: "Could not find that message in this channel." });
+            return;
+          }
+
+          if (existingMessage.author.id !== client.user.id) {
+            await interaction.editReply({
+              content: "I can only edit subscribe messages that were posted by this bot."
+            });
+            return;
+          }
+
+          await existingMessage.edit({
+            content: messageText || existingMessage.content,
+            components: [row]
+          });
+
+          await interaction.editReply({
+            content: `Updated the subscribe message.\nMessage ID: ${existingMessage.id}`
+          });
+        } catch (err) {
+          console.error("[discord] /post-subscribe edit failed", err);
+          await interaction.editReply({
+            content: "Could not edit that subscribe message. Please try again later."
+          });
+        }
+        return;
+      }
+
+      try {
+        const sentMessage = await channel.send({
+          content: messageText || "Click to subscribe and unlock Premium access:",
+          components: [row]
+        });
+
+        await interaction.reply({
+          ephemeral: true,
+          content: `Posted the subscribe message.\nMessage ID: ${sentMessage.id}`
+        });
+      } catch (err) {
+        console.error("[discord] /post-subscribe post failed", err);
+        await interaction.reply({
+          ephemeral: true,
+          content: "Could not post the subscribe message. Please try again later."
+        });
+      }
       return;
     }
   });
@@ -433,13 +540,43 @@ export async function createDiscordBot() {
       },
       {
         name: "post-invite",
-        description: "Post a one-time access button for existing subscribers",
-        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()
+        description: "Post or edit the one-time invite button message",
+        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString(),
+        options: [
+          {
+            name: "text",
+            description: "Message text to post with the invite button",
+            type: 3,
+            required: false,
+            max_length: 2000
+          },
+          {
+            name: "message_id",
+            description: "Existing bot message ID to edit in this channel",
+            type: 3,
+            required: false
+          }
+        ]
       },
       {
         name: "post-subscribe",
-        description: "Post a Subscribe button in this channel",
-        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()
+        description: "Post or edit the Subscribe button message",
+        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString(),
+        options: [
+          {
+            name: "text",
+            description: "Message text to post with the subscribe button",
+            type: 3,
+            required: false,
+            max_length: 2000
+          },
+          {
+            name: "message_id",
+            description: "Existing bot message ID to edit in this channel",
+            type: 3,
+            required: false
+          }
+        ]
       }
     ]);
 
