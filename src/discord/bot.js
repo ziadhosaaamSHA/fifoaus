@@ -4,9 +4,14 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   Events,
   GatewayIntentBits,
-  PermissionsBitField
+  MessageFlags,
+  ModalBuilder,
+  PermissionsBitField,
+  TextInputBuilder,
+  TextInputStyle
 } from "discord.js";
 import { getConfig } from "../config.js";
 import { createStripeClient } from "../stripe/client.js";
@@ -184,6 +189,145 @@ export async function createDiscordBot() {
     );
   }
 
+  function getPostMessageConfig(kind) {
+    if (kind === "invite") {
+      return {
+        modalId: "post-invite:modal",
+        title: "Premium Access Links",
+        footer: "Admin-only access link workflow",
+        defaultBody:
+          "Use the button below to generate a secure one-time access link for an existing mentorship subscriber.",
+        confirmLabel: "invite"
+      };
+    }
+
+    return {
+      modalId: "post-subscribe:modal",
+      title: "Join FIFO AUS Premium",
+      footer: "Secure Stripe checkout with automatic Discord access",
+      defaultBody:
+        "Start your subscription below to unlock the premium Discord role and member-only mentorship access.",
+      confirmLabel: "subscribe"
+    };
+  }
+
+  function createPostMessageEmbed({ kind, body }) {
+    const cfgForKind = getPostMessageConfig(kind);
+    return new EmbedBuilder()
+      .setColor(0xef8600)
+      .setTitle(cfgForKind.title)
+      .setDescription(body || cfgForKind.defaultBody)
+      .setFooter({ text: cfgForKind.footer });
+  }
+
+  function createPostMessagePayload({ kind, body }) {
+    const row = kind === "invite" ? createInviteButtonRow() : createSubscribeButtonRow();
+    return {
+      content: "",
+      embeds: [createPostMessageEmbed({ kind, body })],
+      components: [row]
+    };
+  }
+
+  function createPostMessageModal(kind) {
+    const cfgForKind = getPostMessageConfig(kind);
+    const messageIdInput = new TextInputBuilder()
+      .setCustomId("message_id")
+      .setLabel("Message ID to edit (optional)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder("Leave blank to post a new message");
+    const messageBodyInput = new TextInputBuilder()
+      .setCustomId("message_body")
+      .setLabel("Message body")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(false)
+      .setMaxLength(4000)
+      .setPlaceholder(cfgForKind.defaultBody);
+
+    return new ModalBuilder()
+      .setCustomId(cfgForKind.modalId)
+      .setTitle(cfgForKind.title)
+      .addComponents(
+        new ActionRowBuilder().addComponents(messageIdInput),
+        new ActionRowBuilder().addComponents(messageBodyInput)
+      );
+  }
+
+  async function handlePostMessageModal(interaction, kind) {
+    const channel = interaction.channel;
+    if (!channel || !channel.isTextBased() || !("send" in channel) || !("messages" in channel)) {
+      await interaction.reply({
+        flags: MessageFlags.Ephemeral,
+        content: "Run this in a text channel."
+      });
+      return;
+    }
+
+    const messageId = interaction.fields.getTextInputValue("message_id").trim();
+    const messageBody = interaction.fields.getTextInputValue("message_body").trim();
+    const cfgForKind = getPostMessageConfig(kind);
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    if (messageId) {
+      try {
+        const existingMessage = await channel.messages.fetch(messageId).catch(() => null);
+        if (!existingMessage) {
+          await interaction.editReply({ content: "Could not find that message in this channel." });
+          return;
+        }
+
+        if (existingMessage.author.id !== client.user.id) {
+          await interaction.editReply({
+            content: `I can only edit ${cfgForKind.confirmLabel} messages that were posted by this bot.`
+          });
+          return;
+        }
+
+        const existingBody =
+          existingMessage.embeds[0]?.description ||
+          existingMessage.content ||
+          cfgForKind.defaultBody;
+
+        await existingMessage.edit(
+          createPostMessagePayload({
+            kind,
+            body: messageBody || existingBody
+          })
+        );
+
+        await interaction.editReply({
+          content: `Updated the ${cfgForKind.confirmLabel} message.\nMessage ID: ${existingMessage.id}`
+        });
+      } catch (err) {
+        console.error(`[discord] /${cfgForKind.modalId} edit failed`, err);
+        await interaction.editReply({
+          content: `Could not edit that ${cfgForKind.confirmLabel} message. Please try again later.`
+        });
+      }
+      return;
+    }
+
+    try {
+      const sentMessage = await channel.send(
+        createPostMessagePayload({
+          kind,
+          body: messageBody
+        })
+      );
+
+      await interaction.editReply({
+        content: `Posted the ${cfgForKind.confirmLabel} message.\nMessage ID: ${sentMessage.id}`
+      });
+    } catch (err) {
+      console.error(`[discord] /${cfgForKind.modalId} post failed`, err);
+      await interaction.editReply({
+        content: `Could not post the ${cfgForKind.confirmLabel} message. Please try again later.`
+      });
+    }
+  }
+
   async function createCheckoutSessionForDiscordUser({ discordId }) {
     if (await hasPremium({ discordId })) {
       const err = new Error("already_premium");
@@ -242,14 +386,14 @@ export async function createDiscordBot() {
         const cooldownKey = `subscribe:${discordId}`;
         if (subscribeCooldown.has(cooldownKey)) {
           await interaction.reply({
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
             content: "Please wait a moment before trying again."
           });
           return;
         }
         subscribeCooldown.set(cooldownKey, true);
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
           const session = await createCheckoutSessionForDiscordUser({ discordId });
           const url = session.url;
@@ -281,14 +425,14 @@ export async function createDiscordBot() {
         const cooldownKey = `invite:${discordId}`;
         if (inviteCooldown.has(cooldownKey)) {
           await interaction.reply({
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
             content: "Please wait a moment before trying again."
           });
           return;
         }
         inviteCooldown.set(cooldownKey, true);
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
           if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
             await interaction.editReply({
@@ -329,6 +473,15 @@ export async function createDiscordBot() {
       return;
     }
 
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === "post-invite:modal") {
+        await handlePostMessageModal(interaction, "invite");
+      } else if (interaction.customId === "post-subscribe:modal") {
+        await handlePostMessageModal(interaction, "subscribe");
+      }
+      return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === "status") {
@@ -338,7 +491,7 @@ export async function createDiscordBot() {
         : 0;
 
       await interaction.reply({
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
         content:
           `Subscribers: ${count}\n` +
           `Bot ready: ${state.readyAt ? state.readyAt.toISOString() : "no"}\n` +
@@ -351,7 +504,7 @@ export async function createDiscordBot() {
 
     if (interaction.commandName === "subscribe") {
       const discordId = interaction.user.id;
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const session = await createCheckoutSessionForDiscordUser({ discordId });
         const url = session.url;
@@ -379,134 +532,12 @@ export async function createDiscordBot() {
     }
 
     if (interaction.commandName === "post-invite") {
-      const channel = interaction.channel;
-      const messageText = interaction.options.getString("text");
-      const messageId = interaction.options.getString("message_id");
-
-      if (!channel || !channel.isTextBased() || !("send" in channel) || !("messages" in channel)) {
-        await interaction.reply({ ephemeral: true, content: "Run this in a text channel." });
-        return;
-      }
-
-      const row = createInviteButtonRow();
-
-      if (messageId) {
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-          const existingMessage = await channel.messages.fetch(messageId).catch(() => null);
-          if (!existingMessage) {
-            await interaction.editReply({ content: "Could not find that message in this channel." });
-            return;
-          }
-
-          if (existingMessage.author.id !== client.user.id) {
-            await interaction.editReply({
-              content: "I can only edit invite messages that were posted by this bot."
-            });
-            return;
-          }
-
-          await existingMessage.edit({
-            content: messageText || existingMessage.content,
-            components: [row]
-          });
-
-          await interaction.editReply({
-            content: `Updated the invite message.\nMessage ID: ${existingMessage.id}`
-          });
-        } catch (err) {
-          console.error("[discord] /post-invite edit failed", err);
-          await interaction.editReply({
-            content: "Could not edit that invite message. Please try again later."
-          });
-        }
-        return;
-      }
-
-      try {
-        const sentMessage = await channel.send({
-          content: messageText || "Admins: click below to generate a one-time access link for email.",
-          components: [row]
-        });
-
-        await interaction.reply({
-          ephemeral: true,
-          content: `Posted the invite message.\nMessage ID: ${sentMessage.id}`
-        });
-      } catch (err) {
-        console.error("[discord] /post-invite post failed", err);
-        await interaction.reply({
-          ephemeral: true,
-          content: "Could not post the invite message. Please try again later."
-        });
-      }
+      await interaction.showModal(createPostMessageModal("invite"));
       return;
     }
 
     if (interaction.commandName === "post-subscribe") {
-      const channel = interaction.channel;
-      const messageText = interaction.options.getString("text");
-      const messageId = interaction.options.getString("message_id");
-
-      if (!channel || !channel.isTextBased() || !("send" in channel) || !("messages" in channel)) {
-        await interaction.reply({ ephemeral: true, content: "Run this in a text channel." });
-        return;
-      }
-
-      const row = createSubscribeButtonRow();
-
-      if (messageId) {
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-          const existingMessage = await channel.messages.fetch(messageId).catch(() => null);
-          if (!existingMessage) {
-            await interaction.editReply({ content: "Could not find that message in this channel." });
-            return;
-          }
-
-          if (existingMessage.author.id !== client.user.id) {
-            await interaction.editReply({
-              content: "I can only edit subscribe messages that were posted by this bot."
-            });
-            return;
-          }
-
-          await existingMessage.edit({
-            content: messageText || existingMessage.content,
-            components: [row]
-          });
-
-          await interaction.editReply({
-            content: `Updated the subscribe message.\nMessage ID: ${existingMessage.id}`
-          });
-        } catch (err) {
-          console.error("[discord] /post-subscribe edit failed", err);
-          await interaction.editReply({
-            content: "Could not edit that subscribe message. Please try again later."
-          });
-        }
-        return;
-      }
-
-      try {
-        const sentMessage = await channel.send({
-          content: messageText || "Click to subscribe and unlock Premium access:",
-          components: [row]
-        });
-
-        await interaction.reply({
-          ephemeral: true,
-          content: `Posted the subscribe message.\nMessage ID: ${sentMessage.id}`
-        });
-      } catch (err) {
-        console.error("[discord] /post-subscribe post failed", err);
-        await interaction.reply({
-          ephemeral: true,
-          content: "Could not post the subscribe message. Please try again later."
-        });
-      }
+      await interaction.showModal(createPostMessageModal("subscribe"));
       return;
     }
   });
@@ -540,43 +571,13 @@ export async function createDiscordBot() {
       },
       {
         name: "post-invite",
-        description: "Post or edit the one-time invite button message",
-        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString(),
-        options: [
-          {
-            name: "text",
-            description: "Message text to post with the invite button",
-            type: 3,
-            required: false,
-            max_length: 2000
-          },
-          {
-            name: "message_id",
-            description: "Existing bot message ID to edit in this channel",
-            type: 3,
-            required: false
-          }
-        ]
+        description: "Open the editor for the one-time invite button message",
+        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()
       },
       {
         name: "post-subscribe",
-        description: "Post or edit the Subscribe button message",
-        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString(),
-        options: [
-          {
-            name: "text",
-            description: "Message text to post with the subscribe button",
-            type: 3,
-            required: false,
-            max_length: 2000
-          },
-          {
-            name: "message_id",
-            description: "Existing bot message ID to edit in this channel",
-            type: 3,
-            required: false
-          }
-        ]
+        description: "Open the editor for the Subscribe button message",
+        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()
       }
     ]);
 
