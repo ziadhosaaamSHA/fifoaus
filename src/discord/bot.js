@@ -17,7 +17,6 @@ import { getConfig } from "../config.js";
 import { createStripeClient } from "../stripe/client.js";
 import { createInviteToken, isDbEnabled as isInviteDbEnabled } from "../db/inviteTokens.js";
 import { verifyActiveSubscriber } from "../subscribers/verify.js";
-import { LRUCache } from "lru-cache";
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -161,15 +160,7 @@ export async function createDiscordBot() {
     await updateSubscriberCounter({ reason: `revoke:${reason}` });
   }
 
-  const subscribeCooldown = new LRUCache({
-    max: 50_000,
-    ttl: 60 * 1000
-  });
 
-  const inviteCooldown = new LRUCache({
-    max: 50_000,
-    ttl: 60 * 1000
-  });
 
   function createInviteButtonRow() {
     return new ActionRowBuilder().addComponents(
@@ -383,15 +374,6 @@ export async function createDiscordBot() {
     if (interaction.isButton()) {
       if (interaction.customId === "subscribe:create") {
         const discordId = interaction.user.id;
-        const cooldownKey = `subscribe:${discordId}`;
-        if (subscribeCooldown.has(cooldownKey)) {
-          await interaction.reply({
-            flags: MessageFlags.Ephemeral,
-            content: "Please wait a moment before trying again."
-          });
-          return;
-        }
-        subscribeCooldown.set(cooldownKey, true);
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
@@ -399,13 +381,9 @@ export async function createDiscordBot() {
           const url = session.url;
           if (!url) throw new Error("Stripe did not return a Checkout URL.");
 
-          const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setLabel("Open Checkout").setStyle(ButtonStyle.Link).setURL(url)
-          );
-
           await interaction.editReply({
-            content: "Open Stripe Checkout to complete your subscription.",
-            components: [row]
+            content: `Click the link below to open Stripe Checkout and complete your subscription:\n\n${url}`,
+            components: []
           });
         } catch (err) {
           if (err?.code === "already_premium" || err?.message === "already_premium") {
@@ -422,15 +400,6 @@ export async function createDiscordBot() {
 
       if (interaction.customId === "invite:create") {
         const discordId = interaction.user.id;
-        const cooldownKey = `invite:${discordId}`;
-        if (inviteCooldown.has(cooldownKey)) {
-          await interaction.reply({
-            flags: MessageFlags.Ephemeral,
-            content: "Please wait a moment before trying again."
-          });
-          return;
-        }
-        inviteCooldown.set(cooldownKey, true);
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
@@ -510,13 +479,9 @@ export async function createDiscordBot() {
         const url = session.url;
         if (!url) throw new Error("Stripe did not return a Checkout URL.");
 
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setLabel("Open Checkout").setStyle(ButtonStyle.Link).setURL(url)
-        );
-
         await interaction.editReply({
-          content: "Open Stripe Checkout to complete your subscription.",
-          components: [row]
+          content: `Click the link below to open Stripe Checkout and complete your subscription:\n\n${url}`,
+          components: []
         });
       } catch (err) {
         if (err?.code === "already_premium" || err?.message === "already_premium") {

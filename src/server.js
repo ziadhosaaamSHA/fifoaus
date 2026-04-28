@@ -1,5 +1,4 @@
 import express from "express";
-import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import crypto from "crypto";
 import cookieParser from "cookie-parser";
@@ -240,17 +239,10 @@ export function createApp({ bot }) {
     })
   );
 
-  // Rate limit checkout creation to prevent abuse.
-  const checkoutLimiter = rateLimit({
-    windowMs: 60_000,
-    limit: 10,
-    standardHeaders: "draft-7",
-    legacyHeaders: false
-  });
+
 
   app.post(
     "/checkout-session",
-    checkoutLimiter,
     express.json(),
     asyncRoute(async (req, res) => {
       const parsed = checkoutBodySchema.safeParse(req.body);
@@ -284,18 +276,10 @@ export function createApp({ bot }) {
   );
 
   const webhookRouter = express.Router();
-  const webhookLimiter = rateLimit({
-    windowMs: 60_000,
-    limit: 100,
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-    // Stripe doesn't set stable IPs for all regions; enforce a global cap.
-    keyGenerator: () => "stripe-webhook-global"
-  });
+
 
   webhookRouter.post(
     "/webhook",
-    webhookLimiter,
     express.raw({ type: "application/json" }),
     createStripeWebhookHandler({ cfg, stripe, bot })
   );
