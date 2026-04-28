@@ -385,14 +385,22 @@ export async function createDiscordBot() {
             content: `Click the link below to open Stripe Checkout and complete your subscription:\n\n${url}`,
             components: []
           });
+
+          // Auto-delete reply after 45 seconds
+          setTimeout(() => {
+            interaction.deleteReply().catch(() => null);
+          }, 45 * 1000);
         } catch (err) {
           if (err?.code === "already_premium" || err?.message === "already_premium") {
             await interaction.editReply({ content: "You already have Premium access." });
           } else {
             console.error("[discord] subscribe button failed", err);
-            await interaction.editReply({
+            const msg = await interaction.editReply({
               content: "Could not create a checkout session. Please try again later."
             });
+            setTimeout(() => {
+              interaction.deleteReply().catch(() => null);
+            }, 10 * 1000); // Shorter timeout for errors
           }
         }
         return;
@@ -430,6 +438,11 @@ export async function createDiscordBot() {
           await interaction.editReply({
             content: `One-time access link generated:\n${inviteUrl}\nThis link works once.`
           });
+
+          // Auto-delete reply after 45 seconds
+          setTimeout(() => {
+            interaction.deleteReply().catch(() => null);
+          }, 45 * 1000);
         } catch (err) {
           console.error("[discord] invite button failed", err);
           await interaction.editReply({
@@ -483,6 +496,11 @@ export async function createDiscordBot() {
           content: `Click the link below to open Stripe Checkout and complete your subscription:\n\n${url}`,
           components: []
         });
+
+        // Auto-delete reply after 45 seconds
+        setTimeout(() => {
+          interaction.deleteReply().catch(() => null);
+        }, 45 * 1000);
       } catch (err) {
         if (err?.code === "already_premium" || err?.message === "already_premium") {
           await interaction.editReply({ content: "You already have Premium access." });
