@@ -109,8 +109,11 @@ export function createApp({ bot }) {
 
       const invite = await getInviteToken({ token });
       if (!invite || invite.uses >= invite.max_uses) {
+        console.warn("[invite] invalid or expired token used", { token });
         return res.redirect("/fail?code=invite_invalid");
       }
+
+      console.log("[invite] valid token identified", { token, discordId: invite.discord_id });
 
       res.cookie("invite_token", token, {
         httpOnly: true,
@@ -128,6 +131,7 @@ export function createApp({ bot }) {
   );
 
   app.get("/auth/discord", (req, res) => {
+    console.log("[auth] initiating discord oauth flow");
     const state = crypto.randomBytes(16).toString("hex");
     res.cookie("discord_oauth_state", state, {
       httpOnly: true,
@@ -148,10 +152,14 @@ export function createApp({ bot }) {
       const { code, state } = req.query;
       const savedState = req.cookies.discord_oauth_state;
 
+      console.log("[auth] discord callback received", { hasCode: !!code, stateMatch: state === savedState });
+
       if (!state || state !== savedState) {
+        console.warn("[auth] state mismatch or missing");
         return res.redirect("/fail?code=invalid_state");
       }
       if (!code) {
+        console.warn("[auth] code missing from callback");
         return res.redirect("/fail?code=access_denied");
       }
 
@@ -167,23 +175,38 @@ export function createApp({ bot }) {
         })
       });
 
-      if (!tokenResponse.ok) throw new Error("Failed to exchange token");
+      if (!tokenResponse.ok) {
+        console.error("[auth] token exchange failed", await tokenResponse.text());
+        throw new Error("Failed to exchange token");
+      }
       const tokenData = await tokenResponse.json();
       const accessToken = tokenData.access_token;
+
+      console.log("[auth] token exchanged successfully");
 
       const userResponse = await fetch("https://discord.com/api/users/@me", {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
-      if (!userResponse.ok) throw new Error("Failed to fetch user");
+      if (!userResponse.ok) {
+        console.error("[auth] failed to fetch user info");
+        throw new Error("Failed to fetch user");
+      }
       const userData = await userResponse.json();
       const discord_id = userData.id;
+
+      console.log("[auth] identified user", { discord_id, username: userData.username });
 
       const guildsResponse = await fetch("https://discord.com/api/users/@me/guilds", {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
-      if (!guildsResponse.ok) throw new Error("Failed to fetch guilds");
+      if (!guildsResponse.ok) {
+        console.error("[auth] failed to fetch user guilds");
+        throw new Error("Failed to fetch guilds");
+      }
       const guildsData = await guildsResponse.json();
       const inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
+
+      console.log("[auth] user guild status", { inGuild });
 
       const oauthMode = req.cookies.discord_oauth_mode;
       const inviteToken = req.cookies.invite_token;
@@ -208,9 +231,11 @@ export function createApp({ bot }) {
 
         const consumed = await consumeInviteToken({ token: inviteToken });
         if (!consumed) {
+          console.error("[invite] failed to consume token during oauth callback", { token: inviteToken });
           return res.redirect("/fail?code=invite_invalid");
         }
 
+        console.log("[invite] token consumed successfully, granting premium", { discord_id });
         await bot.grantPremium({ discordId: discord_id, accessToken, reason: "invite:oauth" });
 
         return res.redirect("/invite/success");
@@ -224,6 +249,7 @@ export function createApp({ bot }) {
       const successUrl = cfg.SUCCESS_URL || `${baseUrl}/success`;
       const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
 
+      console.log("[auth] creating stripe subscription session", { discord_id });
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
@@ -235,6 +261,7 @@ export function createApp({ bot }) {
         }
       });
 
+      console.log("[auth] redirecting to stripe checkout", { sessionId: session.id });
       res.redirect(session.url);
     })
   );
@@ -259,6 +286,7 @@ export function createApp({ bot }) {
       const successUrl = cfg.SUCCESS_URL || `${baseUrl}/success`;
       const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
 
+      console.log("[checkout] creating manual session", { discord_id, email: customer_email });
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
@@ -271,6 +299,7 @@ export function createApp({ bot }) {
         }
       });
 
+      console.log("[checkout] session created", { sessionId: session.id });
       return res.status(200).json({ url: session.url });
     })
   );
