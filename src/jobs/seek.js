@@ -219,6 +219,7 @@ function normalizeJob(job) {
     highlights: Array.isArray(job.highlights) ? job.highlights : [],
     summary: job.summary || "",
     listedAt: job.listedAt || "",
+    listedAtUtc: job.listedAtUtc || "",
     externalId: job.externalId,
     url: job.url
   };
@@ -241,6 +242,7 @@ function extractJobsFromStructuredData(html) {
     const summary = payload.match(/"teaser":"(.*?)"/)?.[1];
     const sectionRank = Number(payload.match(/"sectionRank":(\d+)/)?.[1] || Number.MAX_SAFE_INTEGER);
     const listedAt = payload.match(/"label\(\{\\.*?\}\)":"(.*?)"/)?.[1];
+    const listedAtUtc = payload.match(/"dateTimeUtc":"(.*?)"/)?.[1];
 
     const workTypesMatch = payload.match(/"workTypes":\[(.*?)\]/);
     const workType = workTypesMatch ? parseJsonStringArray(workTypesMatch[1]).join(", ") : "";
@@ -263,13 +265,21 @@ function extractJobsFromStructuredData(html) {
         highlights,
         summary: summary ? decodeJsonString(summary) : "",
         listedAt: listedAt ? decodeJsonString(listedAt) : "",
+        listedAtUtc: listedAtUtc ? decodeJsonString(listedAtUtc) : "",
         url: `${SEEK_BASE_URL}/job/${id}`
       })
     });
   }
 
   return structuredJobs
-    .sort((a, b) => a.sortRank - b.sortRank)
+    .sort((a, b) => {
+      const aTime = a.job.listedAtUtc ? Date.parse(a.job.listedAtUtc) : 0;
+      const bTime = b.job.listedAtUtc ? Date.parse(b.job.listedAtUtc) : 0;
+      if (aTime !== bTime) {
+        return bTime - aTime;
+      }
+      return a.sortRank - b.sortRank;
+    })
     .map((entry) => entry.job);
 }
 

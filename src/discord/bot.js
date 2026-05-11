@@ -182,7 +182,7 @@ export async function createDiscordBot() {
     return `${value.slice(0, maxLength - 1)}...`;
   }
 
-  function createSeekJobEmbed(job, index) {
+  function createSeekJobEmbed(job) {
     const embed = new EmbedBuilder()
       .setColor(SEEK_BRAND_COLOR)
       .setTitle(job.title)
@@ -217,10 +217,6 @@ export async function createDiscordBot() {
 
     embed.addFields(fields);
 
-    if (typeof index === "number") {
-      embed.setAuthor({ name: `FIFO job ${index + 1}` });
-    }
-
     return embed;
   }
 
@@ -243,15 +239,15 @@ export async function createDiscordBot() {
       await channel.send({ content: intro });
     }
 
-    for (const [index, job] of jobs.entries()) {
+    for (const job of jobs) {
       await channel.send({
-        embeds: [createSeekJobEmbed(job, index)],
+        embeds: [createSeekJobEmbed(job)],
         components: [createSeekJobRow(job)]
       });
     }
   }
 
-  async function replyWithSeekJobs({ interaction, jobs, intro }) {
+  async function postSeekJobsFromInteraction({ interaction, jobs, intro }) {
     if (jobs.length === 0) {
       await interaction.editReply({ content: intro || "No FIFO jobs were found on SEEK right now." });
       return;
@@ -260,14 +256,13 @@ export async function createDiscordBot() {
     const [firstJob, ...remainingJobs] = jobs;
     await interaction.editReply({
       content: intro || null,
-      embeds: [createSeekJobEmbed(firstJob, 0)],
+      embeds: [createSeekJobEmbed(firstJob)],
       components: [createSeekJobRow(firstJob)]
     });
 
-    for (const [offset, job] of remainingJobs.entries()) {
+    for (const job of remainingJobs) {
       await interaction.followUp({
-        flags: MessageFlags.Ephemeral,
-        embeds: [createSeekJobEmbed(job, offset + 1)],
+        embeds: [createSeekJobEmbed(job)],
         components: [createSeekJobRow(job)]
       });
     }
@@ -626,7 +621,7 @@ export async function createDiscordBot() {
     }
 
     if (interaction.commandName === "seek-fifo") {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await interaction.deferReply();
 
       try {
         const jobs = await fetchSeekFifoJobs({
@@ -641,10 +636,12 @@ export async function createDiscordBot() {
           });
           return;
         }
-        await replyWithSeekJobs({
+        await postSeekJobsFromInteraction({
           interaction,
           jobs,
-          intro: `Latest ${jobs.length} FIFO jobs from SEEK. Tap **Open Job** on any card to view the listing.`
+          intro:
+            `Latest ${jobs.length} FIFO jobs from SEEK, sorted by listing date.\n` +
+            "Use **Open Job** on any card to jump straight to the listing."
         });
       } catch (err) {
         console.error("[discord] /seek-fifo failed", err);
