@@ -42,33 +42,6 @@ function createPersistentStore() {
   };
 }
 
-function formatJobLine(job) {
-  const details = [job.company, job.location, job.salary].filter(Boolean).join(" | ");
-  const summary = job.listedAt ? ` (${job.listedAt})` : "";
-  return `• **${job.title}**${details ? ` — ${details}` : ""}${summary}\n${job.url}`;
-}
-
-function chunkMessages(lines, maxLength = 1800) {
-  const chunks = [];
-  let current = "";
-
-  for (const line of lines) {
-    const next = current ? `${current}\n\n${line}` : line;
-    if (next.length > maxLength && current) {
-      chunks.push(current);
-      current = line;
-    } else {
-      current = next;
-    }
-  }
-
-  if (current) {
-    chunks.push(current);
-  }
-
-  return chunks;
-}
-
 export function logScrapedJobs(jobs, context = "watcher") {
   console.log(`[seek] scraped ${jobs.length} job(s) from SEEK`);
 
@@ -106,16 +79,14 @@ export async function startSeekFifoWatcher({ bot }) {
   let running = false;
 
   async function publishJobs(jobs) {
-    const header = `SEEK FIFO update: ${jobs.length} new job${jobs.length === 1 ? "" : "s"} found`;
-    const chunks = chunkMessages(jobs.map(formatJobLine));
-
-    for (let index = 0; index < chunks.length; index += 1) {
-      const content = index === 0 ? `${header}\n\n${chunks[index]}` : chunks[index];
-      await bot.sendMessageToChannel({
-        channelId: cfg.SEEK_FIFO_CHANNEL_ID,
-        content
-      });
-    }
+    const header =
+      `SEEK FIFO update: ${jobs.length} new job${jobs.length === 1 ? "" : "s"} found.\n` +
+      "Each card includes an Open Job button so members can jump straight to SEEK.";
+    await bot.sendSeekJobsToChannel({
+      channelId: cfg.SEEK_FIFO_CHANNEL_ID,
+      jobs,
+      intro: header
+    });
   }
 
   async function runScan({ reason, scheduledAt = new Date() }) {

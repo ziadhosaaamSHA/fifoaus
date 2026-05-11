@@ -24,6 +24,9 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const SEEK_BRAND_COLOR = 0xef8600;
+const SEEK_CARD_FOOTER = "FIFO AUS x SEEK";
+
 export async function createDiscordBot() {
   const cfg = getConfig();
   const stripe = createStripeClient(cfg);
@@ -174,6 +177,102 @@ export async function createDiscordBot() {
     await channel.send({ content });
   }
 
+  function truncate(value, maxLength) {
+    if (!value || value.length <= maxLength) return value;
+    return `${value.slice(0, maxLength - 1)}...`;
+  }
+
+  function createSeekJobEmbed(job, index) {
+    const embed = new EmbedBuilder()
+      .setColor(SEEK_BRAND_COLOR)
+      .setTitle(job.title)
+      .setURL(job.url)
+      .setDescription(
+        truncate(
+          job.summary || "Fresh FIFO opportunity from SEEK. Use the button below to open the job.",
+          300
+        )
+      )
+      .setFooter({
+        text: `${SEEK_CARD_FOOTER}${job.listedAt ? ` • Listed ${job.listedAt}` : ""}`
+      });
+
+    const fields = [
+      { name: "Company", value: job.company || "Not listed", inline: true },
+      { name: "Location", value: job.location || "Not listed", inline: true },
+      { name: "Work Type", value: job.workType || "Not listed", inline: true }
+    ];
+
+    if (job.salary) {
+      fields.push({ name: "Salary", value: job.salary, inline: true });
+    }
+
+    if (job.highlights?.length) {
+      fields.push({
+        name: "Highlights",
+        value: truncate(job.highlights.map((item) => `• ${item}`).join("\n"), 1024),
+        inline: false
+      });
+    }
+
+    embed.addFields(fields);
+
+    if (typeof index === "number") {
+      embed.setAuthor({ name: `FIFO job ${index + 1}` });
+    }
+
+    return embed;
+  }
+
+  function createSeekJobRow(job) {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel("Open Job").setStyle(ButtonStyle.Link).setURL(job.url)
+    );
+  }
+
+  async function sendSeekJobsToChannel({ channelId, jobs, intro }) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      throw new Error(`channel_not_found:${channelId}`);
+    }
+    if (!channel.isTextBased() || !("send" in channel)) {
+      throw new Error(`channel_not_text:${channelId}`);
+    }
+
+    if (intro) {
+      await channel.send({ content: intro });
+    }
+
+    for (const [index, job] of jobs.entries()) {
+      await channel.send({
+        embeds: [createSeekJobEmbed(job, index)],
+        components: [createSeekJobRow(job)]
+      });
+    }
+  }
+
+  async function replyWithSeekJobs({ interaction, jobs, intro }) {
+    if (jobs.length === 0) {
+      await interaction.editReply({ content: intro || "No FIFO jobs were found on SEEK right now." });
+      return;
+    }
+
+    const [firstJob, ...remainingJobs] = jobs;
+    await interaction.editReply({
+      content: intro || null,
+      embeds: [createSeekJobEmbed(firstJob, 0)],
+      components: [createSeekJobRow(firstJob)]
+    });
+
+    for (const [offset, job] of remainingJobs.entries()) {
+      await interaction.followUp({
+        flags: MessageFlags.Ephemeral,
+        embeds: [createSeekJobEmbed(job, offset + 1)],
+        components: [createSeekJobRow(job)]
+      });
+    }
+  }
+
 
 
   function createInviteButtonRow() {
@@ -219,7 +318,7 @@ export async function createDiscordBot() {
   function createPostMessageEmbed({ kind, body }) {
     const cfgForKind = getPostMessageConfig(kind);
     return new EmbedBuilder()
-      .setColor(0xef8600)
+      .setColor(SEEK_BRAND_COLOR)
       .setTitle(cfgForKind.title)
       .setDescription(body || cfgForKind.defaultBody)
       .setFooter({ text: cfgForKind.footer });
@@ -257,12 +356,6 @@ export async function createDiscordBot() {
         new ActionRowBuilder().addComponents(messageIdInput),
         new ActionRowBuilder().addComponents(messageBodyInput)
       );
-  }
-
-  function formatSeekJob(job, index) {
-    const details = [job.company, job.location, job.salary].filter(Boolean).join(" | ");
-    const listed = job.listedAt ? ` (${job.listedAt})` : "";
-    return `${index + 1}. **${job.title}**${details ? ` — ${details}` : ""}${listed}\n${job.url}`;
   }
 
   async function handlePostMessageModal(interaction, kind) {
@@ -548,13 +641,11 @@ export async function createDiscordBot() {
           });
           return;
         }
-
-        const content = [
-          `Latest ${jobs.length} FIFO jobs from SEEK:`,
-          ...jobs.map((job, index) => formatSeekJob(job, index))
-        ].join("\n\n");
-
-        await interaction.editReply({ content });
+        await replyWithSeekJobs({
+          interaction,
+          jobs,
+          intro: `Latest ${jobs.length} FIFO jobs from SEEK. Tap **Open Job** on any card to view the listing.`
+        });
       } catch (err) {
         console.error("[discord] /seek-fifo failed", err);
         await interaction.editReply({
@@ -640,6 +731,7 @@ export async function createDiscordBot() {
     updateSubscriberCounter,
     countPremiumMembers,
     sendMessageToChannel,
+    sendSeekJobsToChannel,
     client
   };
 }

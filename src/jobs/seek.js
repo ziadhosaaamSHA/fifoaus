@@ -7,6 +7,9 @@ function sleep(ms) {
 
 function decodeHtmlEntities(value) {
   return value
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, hex) =>
+      String.fromCharCode(Number.parseInt(hex, 16))
+    )
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, "\"")
     .replace(/&#39;/g, "'")
@@ -192,6 +195,84 @@ function mergeJobs(textJobs, linkJobs) {
   return merged.filter((job) => job.url);
 }
 
+function escapeJsonStringFragment(value) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function decodeJsonString(value) {
+  return decodeHtmlEntities(JSON.parse(`"${escapeJsonStringFragment(value)}"`));
+}
+
+function parseJsonStringArray(rawArray) {
+  return JSON.parse(`[${rawArray}]`).map((value) =>
+    typeof value === "string" ? decodeHtmlEntities(value) : value
+  );
+}
+
+function normalizeJob(job) {
+  return {
+    title: job.title || "",
+    company: job.company || "",
+    location: job.location || "",
+    workType: job.workType || "",
+    salary: job.salary || "",
+    highlights: Array.isArray(job.highlights) ? job.highlights : [],
+    summary: job.summary || "",
+    listedAt: job.listedAt || "",
+    externalId: job.externalId,
+    url: job.url
+  };
+}
+
+function extractJobsFromStructuredData(html) {
+  const structuredJobs = [];
+  const seenIds = new Set();
+  const regex =
+    /"JobSearchV6Data:\{\\"id\\":\\"(?<id>\d+)\\",\\"tracking\\":\\"(?<tracking>.*?)\\"\}":\{(?<payload>.*?)\},"JobSearchV6/gs;
+
+  for (const match of html.matchAll(regex)) {
+    const { id, payload } = match.groups || {};
+    if (!id || !payload || seenIds.has(id)) continue;
+
+    const title = payload.match(/"title":"(.*?)"/)?.[1];
+    const company = payload.match(/"companyName":"(.*?)"/)?.[1];
+    const location = payload.match(/"locations":\[\{"__typename":"JobSearchV6DataLocation","countryCode":"AU","label":"(.*?)"/)?.[1];
+    const salary = payload.match(/"salaryLabel":"(.*?)"/)?.[1];
+    const summary = payload.match(/"teaser":"(.*?)"/)?.[1];
+    const sectionRank = Number(payload.match(/"sectionRank":(\d+)/)?.[1] || Number.MAX_SAFE_INTEGER);
+    const listedAt = payload.match(/"label\(\{\\.*?\}\)":"(.*?)"/)?.[1];
+
+    const workTypesMatch = payload.match(/"workTypes":\[(.*?)\]/);
+    const workType = workTypesMatch ? parseJsonStringArray(workTypesMatch[1]).join(", ") : "";
+
+    const bulletPointsMatch = payload.match(/"bulletPoints":\[(.*?)\]/);
+    const highlights = bulletPointsMatch ? parseJsonStringArray(bulletPointsMatch[1]) : [];
+
+    if (!title) continue;
+    seenIds.add(id);
+
+    structuredJobs.push({
+      sortRank: sectionRank,
+      job: normalizeJob({
+        externalId: id,
+        title: decodeJsonString(title),
+        company: company ? decodeJsonString(company) : "",
+        location: location ? decodeJsonString(location) : "",
+        workType,
+        salary: salary ? decodeJsonString(salary) : "",
+        highlights,
+        summary: summary ? decodeJsonString(summary) : "",
+        listedAt: listedAt ? decodeJsonString(listedAt) : "",
+        url: `${SEEK_BASE_URL}/job/${id}`
+      })
+    });
+  }
+
+  return structuredJobs
+    .sort((a, b) => a.sortRank - b.sortRank)
+    .map((entry) => entry.job);
+}
+
 async function fetchSeekPage({ searchUrl, fetchImpl }) {
   const maxAttempts = 3;
   let lastError = null;
@@ -236,6 +317,11 @@ async function fetchSeekPage({ searchUrl, fetchImpl }) {
 
 export async function fetchSeekFifoJobs({ searchUrl, maxResults, fetchImpl = fetch }) {
   const html = await fetchSeekPage({ searchUrl, fetchImpl });
+  const structuredJobs = extractJobsFromStructuredData(html);
+  if (structuredJobs.length > 0) {
+    return structuredJobs.slice(0, maxResults);
+  }
+
   const lines = htmlToLines(html);
   const textJobs = extractJobsFromLines(lines);
   const linkJobs = extractJobLinks(html);
