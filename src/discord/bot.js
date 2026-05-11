@@ -239,7 +239,7 @@ export async function createDiscordBot() {
       await channel.send({ content: intro });
     }
 
-    for (const job of jobs) {
+    for (const job of [...jobs].reverse()) {
       await channel.send({
         embeds: [createSeekJobEmbed(job)],
         components: [createSeekJobRow(job)]
@@ -253,14 +253,16 @@ export async function createDiscordBot() {
       return;
     }
 
-    const [firstJob, ...remainingJobs] = jobs;
+    const orderedJobs = [...jobs].reverse();
+    const [firstOrderedJob, ...remainingOrderedJobs] = orderedJobs;
+
     await interaction.editReply({
       content: intro || null,
-      embeds: [createSeekJobEmbed(firstJob)],
-      components: [createSeekJobRow(firstJob)]
+      embeds: [createSeekJobEmbed(firstOrderedJob)],
+      components: [createSeekJobRow(firstOrderedJob)]
     });
 
-    for (const job of remainingJobs) {
+    for (const job of remainingOrderedJobs) {
       await interaction.followUp({
         embeds: [createSeekJobEmbed(job)],
         components: [createSeekJobRow(job)]
@@ -638,10 +640,7 @@ export async function createDiscordBot() {
         }
         await postSeekJobsFromInteraction({
           interaction,
-          jobs,
-          intro:
-            `Latest ${jobs.length} FIFO jobs from SEEK, sorted by listing date.\n` +
-            "Use **Open Job** on any card to jump straight to the listing."
+          jobs
         });
       } catch (err) {
         console.error("[discord] /seek-fifo failed", err);

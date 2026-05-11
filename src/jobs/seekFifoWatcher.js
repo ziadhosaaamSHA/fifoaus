@@ -79,13 +79,9 @@ export async function startSeekFifoWatcher({ bot }) {
   let running = false;
 
   async function publishJobs(jobs) {
-    const header =
-      `SEEK FIFO update: ${jobs.length} new job${jobs.length === 1 ? "" : "s"} found.\n` +
-      "Each card includes an Open Job button so members can jump straight to SEEK.";
     await bot.sendSeekJobsToChannel({
       channelId: cfg.SEEK_FIFO_CHANNEL_ID,
-      jobs,
-      intro: header
+      jobs
     });
   }
 
