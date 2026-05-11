@@ -69,13 +69,13 @@ function chunkMessages(lines, maxLength = 1800) {
   return chunks;
 }
 
-function logScrapedJobs(jobs) {
+export function logScrapedJobs(jobs, context = "watcher") {
   console.log(`[seek] scraped ${jobs.length} job(s) from SEEK`);
 
   jobs.forEach((job, index) => {
     const details = [job.company, job.location, job.salary].filter(Boolean).join(" | ");
     console.log(
-      `[seek] scraped[${index + 1}] ${job.externalId} :: ${job.title}${details ? ` :: ${details}` : ""}`
+      `[seek] ${context} scraped[${index + 1}] ${job.externalId} :: ${job.title}${details ? ` :: ${details}` : ""}`
     );
   });
 }

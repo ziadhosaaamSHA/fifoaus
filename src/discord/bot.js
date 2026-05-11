@@ -15,6 +15,7 @@ import {
 } from "discord.js";
 import { getConfig } from "../config.js";
 import { fetchSeekFifoJobs } from "../jobs/seek.js";
+import { logScrapedJobs } from "../jobs/seekFifoWatcher.js";
 import { createStripeClient } from "../stripe/client.js";
 import { createInviteToken, isDbEnabled as isInviteDbEnabled } from "../db/inviteTokens.js";
 import { verifyActiveSubscriber } from "../subscribers/verify.js";
@@ -539,6 +540,7 @@ export async function createDiscordBot() {
           searchUrl: cfg.SEEK_FIFO_SEARCH_URL,
           maxResults: 5
         });
+        logScrapedJobs(jobs, "/seek-fifo");
 
         if (jobs.length === 0) {
           await interaction.editReply({

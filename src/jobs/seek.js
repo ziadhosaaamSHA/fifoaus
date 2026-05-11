@@ -1,4 +1,9 @@
 const SEEK_BASE_URL = "https://au.seek.com";
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function decodeHtmlEntities(value) {
   return value
@@ -187,20 +192,50 @@ function mergeJobs(textJobs, linkJobs) {
   return merged.filter((job) => job.url);
 }
 
-export async function fetchSeekFifoJobs({ searchUrl, maxResults, fetchImpl = fetch }) {
-  const response = await fetchImpl(searchUrl, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; FIFOAUS/1.0; +https://au.seek.com/FIFO-jobs)",
-      Accept: "text/html,application/xhtml+xml"
-    }
-  });
+async function fetchSeekPage({ searchUrl, fetchImpl }) {
+  const maxAttempts = 3;
+  let lastError = null;
 
-  if (!response.ok) {
-    throw new Error(`SEEK returned ${response.status}`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(searchUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-AU,en;q=0.9"
+        }
+      });
+
+      if (!response.ok) {
+        const error = new Error(`SEEK returned ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+
+      return await response.text();
+    } catch (err) {
+      lastError = err;
+      const status = err?.status;
+      const shouldRetry = attempt < maxAttempts && RETRYABLE_STATUS_CODES.has(status);
+
+      if (!shouldRetry) {
+        throw err;
+      }
+
+      const backoffMs = attempt * 1500;
+      console.warn(
+        `[seek] fetch attempt ${attempt} failed with ${status}, retrying in ${backoffMs}ms`
+      );
+      await sleep(backoffMs);
+    }
   }
 
-  const html = await response.text();
+  throw lastError;
+}
+
+export async function fetchSeekFifoJobs({ searchUrl, maxResults, fetchImpl = fetch }) {
+  const html = await fetchSeekPage({ searchUrl, fetchImpl });
   const lines = htmlToLines(html);
   const textJobs = extractJobsFromLines(lines);
   const linkJobs = extractJobLinks(html);
