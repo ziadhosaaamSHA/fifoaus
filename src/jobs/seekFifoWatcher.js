@@ -69,6 +69,17 @@ function chunkMessages(lines, maxLength = 1800) {
   return chunks;
 }
 
+function logScrapedJobs(jobs) {
+  console.log(`[seek] scraped ${jobs.length} job(s) from SEEK`);
+
+  jobs.forEach((job, index) => {
+    const details = [job.company, job.location, job.salary].filter(Boolean).join(" | ");
+    console.log(
+      `[seek] scraped[${index + 1}] ${job.externalId} :: ${job.title}${details ? ` :: ${details}` : ""}`
+    );
+  });
+}
+
 export async function startSeekFifoWatcher({ bot }) {
   const cfg = getConfig();
   if (!cfg.SEEK_FIFO_ENABLED) {
@@ -121,10 +132,14 @@ export async function startSeekFifoWatcher({ bot }) {
         searchUrl: cfg.SEEK_FIFO_SEARCH_URL,
         maxResults: cfg.SEEK_FIFO_MAX_RESULTS
       });
+      logScrapedJobs(jobs);
 
       const newJobs = [];
       for (const job of jobs) {
         const inserted = await store.markSeen(job);
+        console.log(
+          `[seek] ${inserted ? "new" : "seen"} :: ${job.externalId} :: ${job.title}`
+        );
         if (inserted) {
           newJobs.push(job);
         }
