@@ -10,7 +10,8 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "lint": "eslint .",
-    "invite:one-time": "node scripts/create-one-time-invite.js"
+    "invite:one-time": "node scripts/create-one-time-invite.js",
+    "seek:fifo": "node scripts/scrape-seek-fifo.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

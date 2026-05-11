@@ -6,6 +6,7 @@ Single Node.js service that:
 - Verifies Stripe webhooks (signature + idempotency)
 - Adds/removes a Discord Premium role
 - Updates an optional subscriber counter voice channel
+- Can scrape FIFO job listings from SEEK on an env-driven cron schedule and post new jobs to Discord
 
 ## Local dev
 
@@ -73,10 +74,44 @@ npm run invite:one-time -- --discord-id 123456789012345678
 
 If you omit `--discord-id`, the link can be redeemed by any Discord account with an active subscription.
 
+## SEEK CLI scrape
+
+Run a one-off SEEK FIFO scrape from the command line:
+
+```bash
+npm run seek:fifo
+```
+
+That prints the latest 5 jobs the scraper can find by default.
+
+Optional flags:
+
+```bash
+npm run seek:fifo -- --limit 5
+npm run seek:fifo -- --url https://au.seek.com/FIFO-jobs
+```
+
 ## Notes
 
 - Discord ID is stored in Stripe metadata (`session.metadata.discord_id` and `subscription.metadata.discord_id`). This is how webhooks map back to a member without a database.
 - The bot needs the `GuildMembers` privileged intent enabled in the Discord Developer Portal to reliably fetch members for role changes/counting.
+
+## SEEK FIFO scraper
+
+Set these env vars to enable periodic SEEK scraping:
+
+```env
+SEEK_FIFO_ENABLED=true
+SEEK_FIFO_CHANNEL_ID=123456789012345678
+SEEK_FIFO_SEARCH_URL=https://au.seek.com/FIFO-jobs
+SEEK_FIFO_CRON=0 * * * *
+SEEK_FIFO_MAX_RESULTS=10
+```
+
+- `SEEK_FIFO_CRON` uses a standard 5-field cron format in the server's local timezone.
+- On first startup, the scraper seeds the current SEEK results without posting them, so the Discord channel is not flooded.
+- On later runs, only newly discovered FIFO job listings are posted.
+- If `DATABASE_URL` is configured, seen SEEK jobs are persisted across restarts. Otherwise, dedupe is in-memory only.
 
 ## Railway
 

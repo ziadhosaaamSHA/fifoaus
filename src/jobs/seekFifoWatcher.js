@@ -1,0 +1,179 @@
+import { getConfig } from "../config.js";
+import {
+  countSeenSeekListings,
+  ensureSeekListingsTable,
+  isDbEnabled,
+  markSeekListingSeen
+} from "../db/seekListings.js";
+import { scheduleCronJob } from "./cron.js";
+import { fetchSeekFifoJobs } from "./seek.js";
+
+const SOURCE = "seek:fifo";
+
+function createMemoryStore() {
+  const seenIds = new Set();
+
+  return {
+    async getCount() {
+      return seenIds.size;
+    },
+    async markSeen(job) {
+      const key = job.externalId;
+      if (seenIds.has(key)) return false;
+      seenIds.add(key);
+      return true;
+    }
+  };
+}
+
+function createPersistentStore() {
+  return {
+    async getCount() {
+      return countSeenSeekListings({ source: SOURCE });
+    },
+    async markSeen(job) {
+      return markSeekListingSeen({
+        source: SOURCE,
+        externalId: job.externalId,
+        title: job.title,
+        url: job.url
+      });
+    }
+  };
+}
+
+function formatJobLine(job) {
+  const details = [job.company, job.location, job.salary].filter(Boolean).join(" | ");
+  const summary = job.listedAt ? ` (${job.listedAt})` : "";
+  return `• **${job.title}**${details ? ` — ${details}` : ""}${summary}\n${job.url}`;
+}
+
+function chunkMessages(lines, maxLength = 1800) {
+  const chunks = [];
+  let current = "";
+
+  for (const line of lines) {
+    const next = current ? `${current}\n\n${line}` : line;
+    if (next.length > maxLength && current) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+export async function startSeekFifoWatcher({ bot }) {
+  const cfg = getConfig();
+  if (!cfg.SEEK_FIFO_ENABLED) {
+    return null;
+  }
+
+  if (!cfg.SEEK_FIFO_CHANNEL_ID) {
+    console.warn("[seek] SEEK_FIFO_ENABLED is true but SEEK_FIFO_CHANNEL_ID is missing");
+    return null;
+  }
+
+  const store = isDbEnabled() ? createPersistentStore() : createMemoryStore();
+
+  if (isDbEnabled()) {
+    await ensureSeekListingsTable();
+  } else {
+    console.warn("[seek] DATABASE_URL not configured, using in-memory dedupe for SEEK listings");
+  }
+
+  let suppressNotificationsOnFirstRun = (await store.getCount()) === 0;
+  let lastRunAt = null;
+  let lastSuccessAt = null;
+  let lastError = null;
+  let running = false;
+
+  async function publishJobs(jobs) {
+    const header = `SEEK FIFO update: ${jobs.length} new job${jobs.length === 1 ? "" : "s"} found`;
+    const chunks = chunkMessages(jobs.map(formatJobLine));
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      const content = index === 0 ? `${header}\n\n${chunks[index]}` : chunks[index];
+      await bot.sendMessageToChannel({
+        channelId: cfg.SEEK_FIFO_CHANNEL_ID,
+        content
+      });
+    }
+  }
+
+  async function runScan({ reason, scheduledAt = new Date() }) {
+    if (running) {
+      console.warn("[seek] skipping scan because a previous run is still active");
+      return;
+    }
+
+    running = true;
+    lastRunAt = scheduledAt;
+
+    try {
+      const jobs = await fetchSeekFifoJobs({
+        searchUrl: cfg.SEEK_FIFO_SEARCH_URL,
+        maxResults: cfg.SEEK_FIFO_MAX_RESULTS
+      });
+
+      const newJobs = [];
+      for (const job of jobs) {
+        const inserted = await store.markSeen(job);
+        if (inserted) {
+          newJobs.push(job);
+        }
+      }
+
+      if (suppressNotificationsOnFirstRun) {
+        console.log(`[seek] initial sync completed (${newJobs.length} jobs seeded, no Discord post)`);
+        suppressNotificationsOnFirstRun = false;
+      } else if (newJobs.length > 0) {
+        await publishJobs(newJobs);
+        console.log(`[seek] posted ${newJobs.length} new FIFO jobs to Discord`);
+      } else {
+        console.log("[seek] no new FIFO jobs found");
+      }
+
+      lastSuccessAt = new Date();
+      lastError = null;
+    } catch (err) {
+      lastError = err?.message || String(err);
+      console.error(`[seek] scan failed (${reason})`, err);
+    } finally {
+      running = false;
+    }
+  }
+
+  await runScan({ reason: "startup", scheduledAt: new Date() });
+
+  const scheduler = scheduleCronJob({
+    expression: cfg.SEEK_FIFO_CRON,
+    name: "seek-fifo",
+    task: ({ scheduledAt }) => runScan({ reason: "cron", scheduledAt })
+  });
+
+  console.log(
+    `[seek] watcher started: ${cfg.SEEK_FIFO_SEARCH_URL} on cron "${cfg.SEEK_FIFO_CRON}"`
+  );
+
+  return {
+    stop() {
+      scheduler.stop();
+    },
+    getState() {
+      return {
+        enabled: true,
+        running,
+        lastRunAt,
+        lastSuccessAt,
+        lastError
+      };
+    }
+  };
+}

@@ -14,6 +14,7 @@ import {
   TextInputStyle
 } from "discord.js";
 import { getConfig } from "../config.js";
+import { fetchSeekFifoJobs } from "../jobs/seek.js";
 import { createStripeClient } from "../stripe/client.js";
 import { createInviteToken, isDbEnabled as isInviteDbEnabled } from "../db/inviteTokens.js";
 import { verifyActiveSubscriber } from "../subscribers/verify.js";
@@ -160,6 +161,18 @@ export async function createDiscordBot() {
     await updateSubscriberCounter({ reason: `revoke:${reason}` });
   }
 
+  async function sendMessageToChannel({ channelId, content }) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      throw new Error(`channel_not_found:${channelId}`);
+    }
+    if (!channel.isTextBased() || !("send" in channel)) {
+      throw new Error(`channel_not_text:${channelId}`);
+    }
+
+    await channel.send({ content });
+  }
+
 
 
   function createInviteButtonRow() {
@@ -243,6 +256,12 @@ export async function createDiscordBot() {
         new ActionRowBuilder().addComponents(messageIdInput),
         new ActionRowBuilder().addComponents(messageBodyInput)
       );
+  }
+
+  function formatSeekJob(job, index) {
+    const details = [job.company, job.location, job.salary].filter(Boolean).join(" | ");
+    const listed = job.listedAt ? ` (${job.listedAt})` : "";
+    return `${index + 1}. **${job.title}**${details ? ` — ${details}` : ""}${listed}\n${job.url}`;
   }
 
   async function handlePostMessageModal(interaction, kind) {
@@ -395,7 +414,7 @@ export async function createDiscordBot() {
             await interaction.editReply({ content: "You already have Premium access." });
           } else {
             console.error("[discord] subscribe button failed", err);
-            const msg = await interaction.editReply({
+            await interaction.editReply({
               content: "Could not create a checkout session. Please try again later."
             });
             setTimeout(() => {
@@ -407,8 +426,6 @@ export async function createDiscordBot() {
       }
 
       if (interaction.customId === "invite:create") {
-        const discordId = interaction.user.id;
-
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
           if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
@@ -514,6 +531,37 @@ export async function createDiscordBot() {
       return;
     }
 
+    if (interaction.commandName === "seek-fifo") {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+      try {
+        const jobs = await fetchSeekFifoJobs({
+          searchUrl: cfg.SEEK_FIFO_SEARCH_URL,
+          maxResults: 5
+        });
+
+        if (jobs.length === 0) {
+          await interaction.editReply({
+            content: "No FIFO jobs were found on SEEK right now."
+          });
+          return;
+        }
+
+        const content = [
+          `Latest ${jobs.length} FIFO jobs from SEEK:`,
+          ...jobs.map((job, index) => formatSeekJob(job, index))
+        ].join("\n\n");
+
+        await interaction.editReply({ content });
+      } catch (err) {
+        console.error("[discord] /seek-fifo failed", err);
+        await interaction.editReply({
+          content: "Could not fetch FIFO jobs from SEEK right now. Please try again later."
+        });
+      }
+      return;
+    }
+
     if (interaction.commandName === "post-invite") {
       await interaction.showModal(createPostMessageModal("invite"));
       return;
@@ -553,6 +601,10 @@ export async function createDiscordBot() {
         description: "Start a Stripe subscription checkout"
       },
       {
+        name: "seek-fifo",
+        description: "Fetch the latest 5 FIFO jobs from SEEK"
+      },
+      {
         name: "post-invite",
         description: "Open the editor for the one-time invite button message",
         default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()
@@ -585,6 +637,7 @@ export async function createDiscordBot() {
     hasPremium,
     updateSubscriberCounter,
     countPremiumMembers,
+    sendMessageToChannel,
     client
   };
 }
