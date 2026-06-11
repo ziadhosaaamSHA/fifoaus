@@ -20,6 +20,37 @@ function truncate(value, maxLength) {
   return `${value.slice(0, maxLength - 1)}...`;
 }
 
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+    timeZone: "Australia/Perth"
+  }).format(date);
+}
+
+function hasTimeComponent(value) {
+  return /[tT]\d{2}:\d{2}| \d{2}:\d{2}/.test(String(value || ""));
+}
+
+function formatJobListedAt(job) {
+  const exactDateTime = hasTimeComponent(job.listedAtUtc) ? formatDateTime(job.listedAtUtc) : "";
+  const estimatedDateTime = formatDateTime(job.listedAtEstimatedAt);
+  const sourceText = job.listedAt || "";
+
+  if (exactDateTime && sourceText) return `${sourceText}\n${exactDateTime}`;
+  if (exactDateTime) return exactDateTime;
+  if (estimatedDateTime && sourceText) return `${sourceText}\nEst. ${estimatedDateTime}`;
+  if (estimatedDateTime) return `Est. ${estimatedDateTime}`;
+  return sourceText;
+}
+
 function createJobEmbed(job, { color, footer, fallbackSummary }) {
   const embed = new EmbedBuilder()
     .setColor(color)
@@ -31,9 +62,7 @@ function createJobEmbed(job, { color, footer, fallbackSummary }) {
         300
       )
     )
-    .setFooter({
-      text: `${footer}${job.listedAt ? ` • Listed ${job.listedAt}` : ""}`
-    });
+    .setFooter({ text: footer });
 
   const fields = [
     { name: "Company", value: job.company || "Not listed", inline: true },
@@ -43,6 +72,11 @@ function createJobEmbed(job, { color, footer, fallbackSummary }) {
 
   if (job.salary) {
     fields.push({ name: "Salary", value: job.salary, inline: true });
+  }
+
+  const listedAt = formatJobListedAt(job);
+  if (listedAt) {
+    fields.push({ name: "Listed", value: truncate(listedAt, 1024), inline: true });
   }
 
   if (job.matchedKeywords?.length) {
@@ -94,21 +128,6 @@ export function createLinkedInJobRow(job) {
   );
 }
 
-function formatNewsDate(value) {
-  if (!value) return "Recently";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-AU", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZoneName: "short",
-    timeZone: "Australia/Perth"
-  }).format(date);
-}
-
 function formatSourceLabel(value) {
   if (!value) return "Mining news";
   return value
@@ -139,7 +158,7 @@ export function createNewsEmbed(item) {
       },
       {
         name: "Published",
-        value: formatNewsDate(item.publishedAt),
+        value: formatDateTime(item.publishedAt) || item.publishedAt || "Recently",
         inline: true
       },
       {
