@@ -44,6 +44,29 @@ async function fetchNewsForInteraction({ cfg, source, maxResults }) {
   });
 }
 
+function sortNewsItemsNewestFirst(items) {
+  return [...items].sort((a, b) => {
+    const aTime = a.publishedAt ? Date.parse(a.publishedAt) : 0;
+    const bTime = b.publishedAt ? Date.parse(b.publishedAt) : 0;
+    return bTime - aTime;
+  });
+}
+
+async function fetchConfiguredNewsForInteraction({ cfg, maxResults }) {
+  const items = [];
+
+  for (const source of cfg.NEWS_SOURCES) {
+    const sourceItems = await fetchNewsForInteraction({
+      cfg,
+      source,
+      maxResults
+    });
+    items.push(...sourceItems);
+  }
+
+  return sortNewsItemsNewestFirst(items).slice(0, maxResults);
+}
+
 export async function createCheckoutSessionForDiscordUser({ client, cfg, stripe, discordId }) {
   if (await hasPremium(client, cfg, { discordId })) {
     const err = new Error("already_premium");
@@ -404,9 +427,8 @@ export async function handleInteractionCreate({ client, cfg, stripe, state, inte
     await interaction.deferReply();
 
     try {
-      const items = await fetchNewsForInteraction({
+      const items = await fetchConfiguredNewsForInteraction({
         cfg,
-        source: cfg.NEWS_SOURCE,
         maxResults: cfg.NEWS_MAX_RESULTS
       });
       logNewsItems(items, "/mining-news");

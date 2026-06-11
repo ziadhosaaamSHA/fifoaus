@@ -105,13 +105,13 @@ NEWS_CHANNEL_ID=123456789012345678
 NEWS_ENABLED=true
 NEWS_CRON=15 * * * *
 NEWS_MAX_RESULTS=5
-NEWS_SOURCE=australian-mining-review
+NEWS_SOURCE=australian-mining-review,australian-mining,industry-qld,paydirt,mining-technology
 ```
 
 - `SEEK_FIFO_CRON` and `LINKEDIN_FIFO_CRON` use standard 5-field cron format in the server's local timezone.
 - `FIFO_JOBS_CHANNEL_ID` is the single destination for all FIFO job sources.
 - `NEWS_CHANNEL_ID` is the destination for mining/news embeds.
-- `NEWS_SOURCE` is the content-api source key to consume, for example `australian-mining-review`, `australian-mining`, `industry-qld`, `paydirt`, or `mining-technology`.
+- `NEWS_SOURCE` can be one content-api source key or a comma-separated list, for example `australian-mining-review,australian-mining,industry-qld,paydirt,mining-technology`.
 - Scraping, dedupe, and content persistence live in `content-api`.
 
 ## Railway

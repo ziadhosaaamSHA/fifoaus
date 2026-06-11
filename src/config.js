@@ -8,6 +8,14 @@ function parseEnvBoolean(value, defaultValue = false) {
   return value === "true";
 }
 
+function parseCsv(value, fallback) {
+  const rawValue = value || fallback;
+  return rawValue
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 const configSchema = z.object({
   PORT: z.coerce.number().int().positive().optional(),
   BASE_URL: z.string().url().optional(),
@@ -78,6 +86,7 @@ export function getConfig() {
     NEWS_ENABLED: parseEnvBoolean(cfg.NEWS_ENABLED, false),
     NEWS_CRON: cfg.NEWS_CRON || "15 * * * *",
     NEWS_MAX_RESULTS: cfg.NEWS_MAX_RESULTS || 5,
-    NEWS_SOURCE: cfg.NEWS_SOURCE || "australian-mining-review"
+    NEWS_SOURCE: cfg.NEWS_SOURCE || "australian-mining-review",
+    NEWS_SOURCES: parseCsv(cfg.NEWS_SOURCE, "australian-mining-review")
   };
 }

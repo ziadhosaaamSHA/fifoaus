@@ -49,6 +49,7 @@ describe("getConfig", () => {
     expect(config.NEWS_ENABLED).toBe(false);
     expect(config.NEWS_MAX_RESULTS).toBe(5);
     expect(config.NEWS_SOURCE).toBe("australian-mining-review");
+    expect(config.NEWS_SOURCES).toEqual(["australian-mining-review"]);
   });
 
   it("should throw an error if a required field is missing", () => {
@@ -76,6 +77,18 @@ describe("getConfig", () => {
     vi.stubEnv("NEWS_ENABLED", "true");
     const config = getConfig();
     expect(config.NEWS_ENABLED).toBe(true);
+  });
+
+  it("should parse comma-separated news sources", () => {
+    vi.stubEnv("NEWS_SOURCE", "australian-mining-review, industry-qld,paydirt");
+
+    const config = getConfig();
+
+    expect(config.NEWS_SOURCES).toEqual([
+      "australian-mining-review",
+      "industry-qld",
+      "paydirt"
+    ]);
   });
 
   it("should parse optional content API settings", () => {

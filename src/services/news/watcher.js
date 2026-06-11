@@ -15,6 +15,30 @@ export function logNewsItems(items, context = "watcher") {
   });
 }
 
+function sortNewsItemsNewestFirst(items) {
+  return [...items].sort((a, b) => {
+    const aTime = a.publishedAt ? Date.parse(a.publishedAt) : 0;
+    const bTime = b.publishedAt ? Date.parse(b.publishedAt) : 0;
+    return bTime - aTime;
+  });
+}
+
+async function syncConfiguredNewsSources({ cfg }) {
+  const results = [];
+
+  for (const source of cfg.NEWS_SOURCES) {
+    const scan = await syncNewsFromContentApi({
+      cfg,
+      source,
+      maxResults: cfg.NEWS_MAX_RESULTS
+    });
+
+    results.push(...(scan.items || []));
+  }
+
+  return sortNewsItemsNewestFirst(results);
+}
+
 export async function startNewsWatcher({ bot }) {
   const cfg = getConfig();
 
@@ -47,12 +71,7 @@ export async function startNewsWatcher({ bot }) {
     lastRunAt = scheduledAt;
 
     try {
-      const scan = await syncNewsFromContentApi({
-        cfg,
-        source: cfg.NEWS_SOURCE,
-        maxResults: cfg.NEWS_MAX_RESULTS
-      });
-      const items = scan.items || [];
+      const items = await syncConfiguredNewsSources({ cfg });
       logNewsItems(items);
 
       if (items.length > 0) {
