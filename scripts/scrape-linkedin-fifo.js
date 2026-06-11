@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import { getConfig } from "../src/config.js";
-import { fetchSeekFifoJobs } from "../src/services/jobs/index.js";
+import { fetchLinkedInFifoJobs } from "../src/services/jobs/index.js";
 
 function parseArgs(argv) {
   const args = {};
@@ -26,11 +26,11 @@ function parseArgs(argv) {
 
 function usage() {
   console.log(`Usage:
-  node scripts/scrape-seek-fifo.js [--limit <count>] [--url <seek-url>]
+  node scripts/scrape-linkedin-fifo.js [--limit <count>] [--url <linkedin-url>]
 
 Options:
   --limit   Number of jobs to print (default: 5)
-  --url     Override the SEEK search URL
+  --url     Override the LinkedIn search URL
 `);
 }
 
@@ -48,15 +48,10 @@ function formatJob(job, index) {
     `${index + 1}. ${job.title}`,
     `   Company: ${job.company || "n/a"}`,
     `   Location: ${job.location || "n/a"}`,
-    `   Type: ${job.workType || "n/a"}`,
-    `   Salary: ${job.salary || "n/a"}`,
     `   Listed: ${job.listedAt || "n/a"}`,
+    `   Keywords: ${job.matchedKeywords?.length ? job.matchedKeywords.join(", ") : "n/a"}`,
     `   URL: ${job.url}`
   ];
-
-  if (job.summary) {
-    lines.splice(6, 0, `   Summary: ${job.summary}`);
-  }
 
   return lines.join("\n");
 }
@@ -69,9 +64,9 @@ if (args.help) {
 
 const cfg = getConfig();
 const limit = parseLimit(args.limit);
-const searchUrl = args.url || cfg.SEEK_FIFO_SEARCH_URL || "https://au.seek.com/FIFO-jobs";
+const searchUrl = args.url || cfg.LINKEDIN_FIFO_SEARCH_URL;
 
-const jobs = await fetchSeekFifoJobs({
+const jobs = await fetchLinkedInFifoJobs({
   searchUrl,
   maxResults: limit
 });

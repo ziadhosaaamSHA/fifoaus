@@ -1,5 +1,8 @@
+import { findFifoKeywordMatches } from "../helpers/filters.js";
+
 const SEEK_BASE_URL = "https://au.seek.com";
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const PLATFORM = "seek";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -210,6 +213,8 @@ function parseJsonStringArray(rawArray) {
 }
 
 function normalizeJob(job) {
+  const matchedKeywords = findFifoKeywordMatches(job);
+
   return {
     title: job.title || "",
     company: job.company || "",
@@ -221,7 +226,9 @@ function normalizeJob(job) {
     listedAt: job.listedAt || "",
     listedAtUtc: job.listedAtUtc || "",
     externalId: job.externalId,
-    url: job.url
+    url: job.url,
+    platform: PLATFORM,
+    matchedKeywords
   };
 }
 
@@ -329,7 +336,7 @@ export async function fetchSeekFifoJobs({ searchUrl, maxResults, fetchImpl = fet
   const html = await fetchSeekPage({ searchUrl, fetchImpl });
   const structuredJobs = extractJobsFromStructuredData(html);
   if (structuredJobs.length > 0) {
-    return structuredJobs.slice(0, maxResults);
+    return structuredJobs.filter((job) => job.matchedKeywords.length > 0).slice(0, maxResults);
   }
 
   const lines = htmlToLines(html);
@@ -337,5 +344,8 @@ export async function fetchSeekFifoJobs({ searchUrl, maxResults, fetchImpl = fet
   const linkJobs = extractJobLinks(html);
   const jobs = mergeJobs(textJobs, linkJobs);
 
-  return jobs.slice(0, maxResults);
+  const filteredJobs = jobs
+    .map(normalizeJob)
+    .filter((job) => job.matchedKeywords.length > 0);
+  return filteredJobs.slice(0, maxResults);
 }

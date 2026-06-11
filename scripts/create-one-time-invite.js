@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import { getConfig } from "../src/config.js";
-import { isDbEnabled } from "../src/db/subscribers.js";
-import { createInviteToken } from "../src/db/inviteTokens.js";
-import { createStripeClient } from "../src/stripe/client.js";
-import { verifyActiveSubscriber } from "../src/subscribers/verify.js";
+import { isDbEnabled } from "../src/services/db/subscribers.js";
+import { createInviteToken } from "../src/services/db/inviteTokens.js";
+import { createStripeClient } from "../src/services/stripe/client.js";
+import { verifyActiveSubscriber } from "../src/services/subscribers/verify.js";
 
 function parseArgs(argv) {
   const args = {};

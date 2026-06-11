@@ -32,7 +32,13 @@ const configSchema = z.object({
   SEEK_FIFO_CHANNEL_ID: discordIdSchema.optional().or(z.literal("")),
   SEEK_FIFO_SEARCH_URL: z.string().url().optional(),
   SEEK_FIFO_CRON: z.string().min(1).optional(),
-  SEEK_FIFO_MAX_RESULTS: z.coerce.number().int().positive().max(25).optional()
+  SEEK_FIFO_MAX_RESULTS: z.coerce.number().int().positive().max(25).optional(),
+
+  LINKEDIN_FIFO_ENABLED: envBooleanSchema.optional(),
+  LINKEDIN_FIFO_CHANNEL_ID: discordIdSchema.optional().or(z.literal("")),
+  LINKEDIN_FIFO_SEARCH_URL: z.string().url().optional(),
+  LINKEDIN_FIFO_CRON: z.string().min(1).optional(),
+  LINKEDIN_FIFO_MAX_RESULTS: z.coerce.number().int().positive().max(25).optional()
 });
 
 export function getConfig() {
@@ -53,6 +59,14 @@ export function getConfig() {
     SEEK_FIFO_CHANNEL_ID: cfg.SEEK_FIFO_CHANNEL_ID || undefined,
     SEEK_FIFO_SEARCH_URL: cfg.SEEK_FIFO_SEARCH_URL || "https://au.seek.com/FIFO-jobs",
     SEEK_FIFO_CRON: cfg.SEEK_FIFO_CRON || "0 * * * *",
-    SEEK_FIFO_MAX_RESULTS: cfg.SEEK_FIFO_MAX_RESULTS || 10
+    SEEK_FIFO_MAX_RESULTS: cfg.SEEK_FIFO_MAX_RESULTS || 10,
+
+    LINKEDIN_FIFO_ENABLED: parseEnvBoolean(cfg.LINKEDIN_FIFO_ENABLED, false),
+    LINKEDIN_FIFO_CHANNEL_ID: cfg.LINKEDIN_FIFO_CHANNEL_ID || undefined,
+    LINKEDIN_FIFO_SEARCH_URL:
+      cfg.LINKEDIN_FIFO_SEARCH_URL ||
+      "https://www.linkedin.com/jobs/search?keywords=%28FIFO%2BOR%2BDIDO%2BOR%2BOil%2BOR%2BGas%2BOR%2BConstruction%2BFifo%2BOR%2BFifo%2BMining%29&location=Australia&geoId=101452733&f_TPR=r86400",
+    LINKEDIN_FIFO_CRON: cfg.LINKEDIN_FIFO_CRON || "7 * * * *",
+    LINKEDIN_FIFO_MAX_RESULTS: cfg.LINKEDIN_FIFO_MAX_RESULTS || 10
   };
 }

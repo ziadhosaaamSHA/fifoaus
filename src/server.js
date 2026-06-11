@@ -2,15 +2,16 @@ import express from "express";
 import { z } from "zod";
 import crypto from "crypto";
 import cookieParser from "cookie-parser";
+import { rateLimit } from "express-rate-limit";
 import { getConfig } from "./config.js";
-import { createStripeClient } from "./stripe/client.js";
-import { createStripeWebhookHandler } from "./stripe/webhook.js";
+import { createStripeClient } from "./services/stripe/client.js";
+import { createStripeWebhookHandler } from "./services/stripe/webhook.js";
 import { renderResultPage, renderLandingPage } from "./pages/resultPages.js";
 import {
   getInviteToken,
   consumeInviteToken,
   isDbEnabled as isInviteDbEnabled
-} from "./db/inviteTokens.js";
+} from "./services/db/inviteTokens.js";
 
 const checkoutBodySchema = z.object({
   discord_id: z.string().regex(/^\d{17,20}$/),
@@ -24,6 +25,59 @@ export function createApp({ bot }) {
   const app = express();
   app.set("trust proxy", 1);
   app.use(cookieParser());
+
+  // Security Headers Middleware
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "no-referrer-when-downgrade");
+    next();
+  });
+
+  // Rate limit error handler to handle browser vs API routes gracefully
+  const rateLimitHandler = (req, res, next, options) => {
+    console.warn(`[rate-limit] limit exceeded for IP: ${req.ip} on ${req.originalUrl}`);
+    if (typeof req.accepts === "function" && req.accepts("html")) {
+      return res.status(options.statusCode).type("html").send(
+        renderResultPage({
+          variant: "fail",
+          title: "Too Many Requests",
+          message: typeof options.message === "object" ? options.message.error : options.message,
+          supportText: cfg.SUPPORT_TEXT
+        })
+      );
+    }
+    return res.status(options.statusCode).json(options.message);
+  };
+
+  // Define Rate Limiters (50 requests per 5 minutes)
+  const checkoutRateLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 mins
+    max: 50,
+    message: { error: "Too many checkout requests, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler
+  });
+
+  const discordAuthLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 50,
+    message: { error: "Too many authentication requests, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler
+  });
+
+  const inviteLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 50,
+    message: { error: "Too many invite redemption attempts, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler
+  });
 
   app.get("/", (_req, res) => res.status(200).type("html").send(renderLandingPage(cfg)));
   app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
@@ -77,6 +131,24 @@ export function createApp({ bot }) {
     } else if (code === "invite_user_mismatch") {
       message = "This access link was generated for a different Discord account.";
       title = "Access Error";
+    } else if (code === "discord_auth_failed") {
+      message = "We couldn't exchange authentication tokens with Discord. Please try again.";
+      title = "Authentication Error";
+    } else if (code === "discord_user_failed") {
+      message = "We couldn't retrieve your Discord user profile. Please try again.";
+      title = "Authentication Error";
+    } else if (code === "discord_guilds_failed") {
+      message = "We couldn't retrieve your list of Discord servers. Please try again.";
+      title = "Authentication Error";
+    } else if (code === "stripe_session_failed") {
+      message = "We failed to prepare the checkout session. Please try again or contact support.";
+      title = "Checkout Error";
+    } else if (code === "invalid_state") {
+      message = "Security state verification failed. This can happen if you waited too long. Please try again.";
+      title = "Session Error";
+    } else if (code === "access_denied") {
+      message = "Discord access request was cancelled or denied.";
+      title = "Access Denied";
     }
     res.status(200).type("html").send(
       renderResultPage({
@@ -102,6 +174,7 @@ export function createApp({ bot }) {
 
   app.get(
     "/invite/:token",
+    inviteLimiter,
     asyncRoute(async (req, res) => {
       const token = req.params.token;
       if (!token) return res.redirect("/fail?code=invite_invalid");
@@ -130,7 +203,7 @@ export function createApp({ bot }) {
     })
   );
 
-  app.get("/auth/discord", (req, res) => {
+  app.get("/auth/discord", discordAuthLimiter, (req, res) => {
     console.log("[auth] initiating discord oauth flow");
     const state = crypto.randomBytes(16).toString("hex");
     res.cookie("discord_oauth_state", state, {
@@ -148,6 +221,7 @@ export function createApp({ bot }) {
 
   app.get(
     "/auth/discord/callback",
+    discordAuthLimiter,
     asyncRoute(async (req, res) => {
       const { code, state } = req.query;
       const savedState = req.cookies.discord_oauth_state;
@@ -163,48 +237,66 @@ export function createApp({ bot }) {
         return res.redirect("/fail?code=access_denied");
       }
 
-      const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: cfg.DISCORD_CLIENT_ID,
-          client_secret: cfg.DISCORD_CLIENT_SECRET,
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: getRedirectUri(req)
-        })
-      });
+      let accessToken;
+      try {
+        const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: cfg.DISCORD_CLIENT_ID,
+            client_secret: cfg.DISCORD_CLIENT_SECRET,
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: getRedirectUri(req)
+          })
+        });
 
-      if (!tokenResponse.ok) {
-        console.error("[auth] token exchange failed", await tokenResponse.text());
-        throw new Error("Failed to exchange token");
+        if (!tokenResponse.ok) {
+          console.error("[auth] token exchange failed", await tokenResponse.text());
+          return res.redirect("/fail?code=discord_auth_failed");
+        }
+        const tokenData = await tokenResponse.json();
+        accessToken = tokenData.access_token;
+      } catch (err) {
+        console.error("[auth] network error during token exchange", err);
+        return res.redirect("/fail?code=discord_auth_failed");
       }
-      const tokenData = await tokenResponse.json();
-      const accessToken = tokenData.access_token;
 
       console.log("[auth] token exchanged successfully");
 
-      const userResponse = await fetch("https://discord.com/api/users/@me", {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if (!userResponse.ok) {
-        console.error("[auth] failed to fetch user info");
-        throw new Error("Failed to fetch user");
+      let discord_id, userData;
+      try {
+        const userResponse = await fetch("https://discord.com/api/users/@me", {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!userResponse.ok) {
+          console.error("[auth] failed to fetch user info", await userResponse.text());
+          return res.redirect("/fail?code=discord_user_failed");
+        }
+        userData = await userResponse.json();
+        discord_id = userData.id;
+      } catch (err) {
+        console.error("[auth] network error fetching user info", err);
+        return res.redirect("/fail?code=discord_user_failed");
       }
-      const userData = await userResponse.json();
-      const discord_id = userData.id;
 
       console.log("[auth] identified user", { discord_id, username: userData.username });
 
-      const guildsResponse = await fetch("https://discord.com/api/users/@me/guilds", {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if (!guildsResponse.ok) {
-        console.error("[auth] failed to fetch user guilds");
-        throw new Error("Failed to fetch guilds");
+      let inGuild;
+      try {
+        const guildsResponse = await fetch("https://discord.com/api/users/@me/guilds", {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!guildsResponse.ok) {
+          console.error("[auth] failed to fetch user guilds", await guildsResponse.text());
+          return res.redirect("/fail?code=discord_guilds_failed");
+        }
+        const guildsData = await guildsResponse.json();
+        inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
+      } catch (err) {
+        console.error("[auth] network error fetching user guilds", err);
+        return res.redirect("/fail?code=discord_guilds_failed");
       }
-      const guildsData = await guildsResponse.json();
-      const inGuild = guildsData.some((g) => g.id === cfg.DISCORD_GUILD_ID);
 
       console.log("[auth] user guild status", { inGuild });
 
@@ -250,19 +342,24 @@ export function createApp({ bot }) {
       const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
 
       console.log("[auth] creating stripe subscription session", { discord_id });
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: { discord_id, discord_access_token: accessToken },
-        subscription_data: {
-          metadata: { discord_id }
-        }
-      });
+      try {
+        const session = await stripe.checkout.sessions.create({
+          mode: "subscription",
+          line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          metadata: { discord_id, discord_access_token: accessToken },
+          subscription_data: {
+            metadata: { discord_id }
+          }
+        });
 
-      console.log("[auth] redirecting to stripe checkout", { sessionId: session.id });
-      res.redirect(session.url);
+        console.log("[auth] redirecting to stripe checkout", { sessionId: session.id });
+        res.redirect(session.url);
+      } catch (err) {
+        console.error("[auth] failed to create Stripe checkout session in callback", err);
+        return res.redirect("/fail?code=stripe_session_failed");
+      }
     })
   );
 
@@ -270,6 +367,7 @@ export function createApp({ bot }) {
 
   app.post(
     "/checkout-session",
+    checkoutRateLimiter,
     express.json(),
     asyncRoute(async (req, res) => {
       const parsed = checkoutBodySchema.safeParse(req.body);
@@ -287,20 +385,25 @@ export function createApp({ bot }) {
       const cancelUrl = cfg.CANCEL_URL || `${baseUrl}/cancel`;
 
       console.log("[checkout] creating manual session", { discord_id, email: customer_email });
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        customer_email: customer_email || undefined,
-        metadata: { discord_id },
-        subscription_data: {
-          metadata: { discord_id }
-        }
-      });
+      try {
+        const session = await stripe.checkout.sessions.create({
+          mode: "subscription",
+          line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          customer_email: customer_email || undefined,
+          metadata: { discord_id },
+          subscription_data: {
+            metadata: { discord_id }
+          }
+        });
 
-      console.log("[checkout] session created", { sessionId: session.id });
-      return res.status(200).json({ url: session.url });
+        console.log("[checkout] session created", { sessionId: session.id });
+        return res.status(200).json({ url: session.url });
+      } catch (err) {
+        console.error("[checkout] failed to create Stripe checkout session", err);
+        return res.status(500).json({ error: "stripe_session_failed", message: err.message });
+      }
     })
   );
 

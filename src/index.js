@@ -1,12 +1,12 @@
 import "dotenv/config";
 import { createApp } from "./server.js";
-import { createDiscordBot } from "./discord/bot.js";
-import { startSeekFifoWatcher } from "./jobs/seekFifoWatcher.js";
+import { createDiscordBot } from "./services/discord/bot.js";
+import { startConfiguredJobWatchers } from "./services/jobs/index.js";
 
 const port = Number(process.env.PORT || 3000);
 
 const bot = await createDiscordBot();
-await startSeekFifoWatcher({ bot });
+await startConfiguredJobWatchers({ bot });
 const app = createApp({ bot });
 
 app.listen(port, () => {

@@ -11,7 +11,11 @@
     "start": "node src/index.js",
     "lint": "eslint .",
     "invite:one-time": "node scripts/create-one-time-invite.js",
-    "seek:fifo": "node scripts/scrape-seek-fifo.js"
+    "seek:fifo": "node scripts/scrape-seek-fifo.js",
+    "linkedin:fifo": "node scripts/scrape-linkedin-fifo.js",
+    "linkedin:real-scrape": "node scripts/real-scrape-linkedin-fifo.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
@@ -27,6 +31,7 @@
   "devDependencies": {
     "@eslint/js": "^9.34.0",
     "eslint": "^9.34.0",
-    "globals": "^16.4.0"
+    "globals": "^16.4.0",
+    "vitest": "^4.1.8"
   }
 }
