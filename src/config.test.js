@@ -91,6 +91,14 @@ describe("getConfig", () => {
     ]);
   });
 
+  it("should parse news sources when the env key is pasted into the value", () => {
+    vi.stubEnv("NEWS_SOURCE", "NEWS_SOURCE=australian-mining-review, industry-qld");
+
+    const config = getConfig();
+
+    expect(config.NEWS_SOURCES).toEqual(["australian-mining-review", "industry-qld"]);
+  });
+
   it("should parse optional content API settings", () => {
     vi.stubEnv("CONTENT_API_BASE_URL", "https://content-api.example.com");
     vi.stubEnv("CONTENT_API_TOKEN", "secret-token");

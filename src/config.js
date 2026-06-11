@@ -12,7 +12,7 @@ function parseCsv(value, fallback) {
   const rawValue = value || fallback;
   return rawValue
     .split(",")
-    .map((item) => item.trim())
+    .map((item) => item.trim().replace(/^[A-Z_]+=/, "").trim())
     .filter(Boolean);
 }
 
