@@ -1,11 +1,14 @@
 import { MessageFlags, PermissionsBitField } from "discord.js";
 import { isDbEnabled as isInviteDbEnabled, createInviteToken } from "../db/inviteTokens.js";
 import { hasPremium } from "./premium.js";
-import { listJobsFromContentApi } from "../jobs/apiClient.js";
+import { listJobsFromContentApi, listNewsFromContentApi } from "../jobs/apiClient.js";
 import { logScrapedJobs } from "../jobs/index.js";
+import { logNewsItems } from "../news/index.js";
 import {
   createLinkedInJobEmbed,
   createLinkedInJobRow,
+  createNewsEmbed,
+  createNewsRow,
   createPostMessagePayload,
   createPostMessageModal,
   getPostMessageConfig,
@@ -23,6 +26,18 @@ async function fetchJobsForInteraction({ cfg, source, maxResults }) {
   }
 
   return listJobsFromContentApi({
+    cfg,
+    source,
+    limit: maxResults
+  });
+}
+
+async function fetchNewsForInteraction({ cfg, source, maxResults }) {
+  if (!cfg.CONTENT_API_BASE_URL) {
+    throw new Error("content_api_not_configured");
+  }
+
+  return listNewsFromContentApi({
     cfg,
     source,
     limit: maxResults
@@ -155,6 +170,34 @@ export async function postSeekJobsFromInteraction({
     await interaction.followUp({
       embeds: [createEmbed(job)],
       components: [createRow(job)]
+    });
+  }
+}
+
+export async function postNewsFromInteraction({
+  interaction,
+  items,
+  intro,
+  emptyMessage = "No mining news items were found right now."
+}) {
+  if (items.length === 0) {
+    await interaction.editReply({ content: intro || emptyMessage });
+    return;
+  }
+
+  const orderedItems = [...items].reverse();
+  const [firstOrderedItem, ...remainingOrderedItems] = orderedItems;
+
+  await interaction.editReply({
+    content: intro || null,
+    embeds: [createNewsEmbed(firstOrderedItem)],
+    components: [createNewsRow(firstOrderedItem)]
+  });
+
+  for (const item of remainingOrderedItems) {
+    await interaction.followUp({
+      embeds: [createNewsEmbed(item)],
+      components: [createNewsRow(item)]
     });
   }
 }
@@ -352,6 +395,34 @@ export async function handleInteractionCreate({ client, cfg, stripe, state, inte
           err?.message === "content_api_not_configured"
             ? "CONTENT_API_BASE_URL is not configured for the bot service."
             : "Could not fetch FIFO jobs from LinkedIn right now. Please try again later."
+      });
+    }
+    return;
+  }
+
+  if (interaction.commandName === "mining-news") {
+    await interaction.deferReply();
+
+    try {
+      const items = await fetchNewsForInteraction({
+        cfg,
+        source: cfg.NEWS_SOURCE,
+        maxResults: cfg.NEWS_MAX_RESULTS
+      });
+      logNewsItems(items, "/mining-news");
+
+      await postNewsFromInteraction({
+        interaction,
+        items,
+        emptyMessage: "No mining news items were found right now."
+      });
+    } catch (err) {
+      console.error("[discord] /mining-news failed", err);
+      await interaction.editReply({
+        content:
+          err?.message === "content_api_not_configured"
+            ? "CONTENT_API_BASE_URL is not configured for the bot service."
+            : "Could not fetch mining news right now. Please try again later."
       });
     }
     return;

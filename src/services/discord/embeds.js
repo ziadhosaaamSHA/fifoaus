@@ -12,6 +12,8 @@ const SEEK_BRAND_COLOR = 0xef8600;
 const SEEK_CARD_FOOTER = "FIFO AUS x SEEK";
 const LINKEDIN_BRAND_COLOR = 0x0a66c2;
 const LINKEDIN_CARD_FOOTER = "FIFO AUS x LinkedIn";
+const NEWS_BRAND_COLOR = 0x16a34a;
+const NEWS_CARD_FOOTER = "FIFO AUS mining news";
 
 function truncate(value, maxLength) {
   if (!value || value.length <= maxLength) return value;
@@ -89,6 +91,78 @@ export function createLinkedInJobEmbed(job) {
 export function createLinkedInJobRow(job) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setLabel("Open Job").setStyle(ButtonStyle.Link).setURL(job.url)
+  );
+}
+
+function formatNewsDate(value) {
+  if (!value) return "Recently";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Australia/Perth"
+  }).format(date);
+}
+
+function formatSourceLabel(value) {
+  if (!value) return "Mining news";
+  return value
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function createNewsEmbed(item) {
+  const embed = new EmbedBuilder()
+    .setColor(NEWS_BRAND_COLOR)
+    .setAuthor({
+      name: `${item.publisher || formatSourceLabel(item.source)}`
+    })
+    .setTitle(truncate(item.title, 256))
+    .setURL(item.url)
+    .setDescription(
+      truncate(
+        item.summary || "Fresh mining and resources update. Use the button below to read the full story.",
+        420
+      )
+    )
+    .addFields([
+      {
+        name: "Source",
+        value: formatSourceLabel(item.source),
+        inline: true
+      },
+      {
+        name: "Published",
+        value: formatNewsDate(item.publishedAt),
+        inline: true
+      },
+      {
+        name: "Matched",
+        value: item.matchedKeywords?.length
+          ? truncate(item.matchedKeywords.slice(0, 8).join(", "), 1024)
+          : "Mining",
+        inline: true
+      }
+    ])
+    .setFooter({ text: NEWS_CARD_FOOTER });
+
+  if (item.tags?.length) {
+    embed.addFields({
+      name: "Topics",
+      value: truncate(item.tags.slice(0, 6).join(", "), 1024),
+      inline: false
+    });
+  }
+
+  return embed;
+}
+
+export function createNewsRow(item) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setLabel("Read Story").setStyle(ButtonStyle.Link).setURL(item.url)
   );
 }
 

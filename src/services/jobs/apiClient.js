@@ -45,3 +45,28 @@ export async function syncJobsFromContentApi({ cfg, source, maxResults }) {
   });
   return readJsonResponse(response);
 }
+
+export async function listNewsFromContentApi({ cfg, source, limit = 20 }) {
+  const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
+  const url = new URL(`${baseUrl}/api/news`);
+  if (source) url.searchParams.set("source", source);
+  url.searchParams.set("limit", String(limit));
+
+  const response = await fetch(url, {
+    headers: buildHeaders(cfg)
+  });
+  const payload = await readJsonResponse(response);
+  return payload.items || [];
+}
+
+export async function syncNewsFromContentApi({ cfg, source, maxResults }) {
+  const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
+  const url = new URL(`${baseUrl}/api/news/sync/${source}`);
+  if (maxResults) url.searchParams.set("maxResults", String(maxResults));
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: buildHeaders(cfg)
+  });
+  return readJsonResponse(response);
+}

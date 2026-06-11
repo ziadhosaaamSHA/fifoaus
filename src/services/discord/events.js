@@ -69,6 +69,10 @@ export function setupDiscordEvents({ client, cfg, stripe, state }) {
         description: "Fetch the latest 5 FIFO jobs from LinkedIn"
       },
       {
+        name: "mining-news",
+        description: "Fetch the latest mining and resources news"
+      },
+      {
         name: "post-invite",
         description: "Open the editor for the one-time invite button message",
         default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString()

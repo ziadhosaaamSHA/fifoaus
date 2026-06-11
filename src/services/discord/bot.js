@@ -5,6 +5,8 @@ import { setupDiscordEvents } from "./events.js";
 import {
   createLinkedInJobEmbed,
   createLinkedInJobRow,
+  createNewsEmbed,
+  createNewsRow,
   createSeekJobEmbed,
   createSeekJobRow
 } from "./embeds.js";
@@ -86,6 +88,27 @@ export async function createDiscordBot() {
     });
   }
 
+  async function sendNewsToChannel({ channelId, items, intro }) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      throw new Error(`channel_not_found:${channelId}`);
+    }
+    if (!channel.isTextBased() || !("send" in channel)) {
+      throw new Error(`channel_not_text:${channelId}`);
+    }
+
+    if (intro) {
+      await channel.send({ content: intro });
+    }
+
+    for (const item of [...items].reverse()) {
+      await channel.send({
+        embeds: [createNewsEmbed(item)],
+        components: [createNewsRow(item)]
+      });
+    }
+  }
+
   await client.login(cfg.DISCORD_TOKEN);
 
   return {
@@ -98,6 +121,7 @@ export async function createDiscordBot() {
     sendJobsToChannel,
     sendSeekJobsToChannel,
     sendLinkedInJobsToChannel,
+    sendNewsToChannel,
     client
   };
 }
