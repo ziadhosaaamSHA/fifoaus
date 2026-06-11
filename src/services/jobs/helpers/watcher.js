@@ -62,11 +62,7 @@ export async function startFifoWatcher({
       const jobs = scan.jobs || [];
       logScrapedJobs(jobs);
 
-      if (scan.initialSync) {
-        console.log(
-          `[${platform}] initial API sync completed (${jobs.length} jobs seeded, no Discord post)`
-        );
-      } else if (jobs.length > 0) {
+      if (jobs.length > 0) {
         await sendJobsToChannel({ channelId, jobs });
         console.log(`[${platform}] posted ${jobs.length} new FIFO jobs to Discord`);
       } else {
