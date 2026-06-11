@@ -30,7 +30,9 @@ async function syncConfiguredNewsSources({ cfg }) {
     const scan = await syncNewsFromContentApi({
       cfg,
       source,
-      maxResults: cfg.NEWS_MAX_RESULTS
+      maxResults: cfg.NEWS_MAX_RESULTS,
+      minAgeHours: cfg.NEWS_MIN_AGE_HOURS,
+      maxAgeHours: cfg.NEWS_MAX_AGE_HOURS
     });
 
     results.push(...(scan.items || []));

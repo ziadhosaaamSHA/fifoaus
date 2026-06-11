@@ -112,6 +112,10 @@ NEWS_SOURCE=australian-mining-review,australian-mining,industry-qld,paydirt,mini
 - `FIFO_JOBS_CHANNEL_ID` is the single destination for all FIFO job sources.
 - `NEWS_CHANNEL_ID` is the destination for mining/news embeds.
 - `NEWS_SOURCE` can be one content-api source key or a comma-separated list, for example `australian-mining-review,australian-mining,industry-qld,paydirt,mining-technology`.
+- Optional freshness filters can be used per deployed consumer:
+  - paid/fresh app: `FIFO_JOBS_MAX_AGE_HOURS=24` and `NEWS_MAX_AGE_HOURS=24`
+  - free/delayed app: `FIFO_JOBS_MIN_AGE_HOURS=24` and `NEWS_MIN_AGE_HOURS=24`
+  - leave them unset to consume all matching content.
 - Scraping, dedupe, and content persistence live in `content-api`.
 
 ## Railway

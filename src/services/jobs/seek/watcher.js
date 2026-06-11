@@ -4,7 +4,14 @@ import { syncJobsFromContentApi } from "../apiClient.js";
 export async function startSeekFifoWatcher({ bot }) {
   const cfg = getJobsConfig();
   const fetchScan = cfg.CONTENT_API_BASE_URL
-    ? ({ maxResults }) => syncJobsFromContentApi({ cfg, source: "seek", maxResults })
+    ? ({ maxResults }) =>
+        syncJobsFromContentApi({
+          cfg,
+          source: "seek",
+          maxResults,
+          minAgeHours: cfg.FIFO_JOBS_MIN_AGE_HOURS,
+          maxAgeHours: cfg.FIFO_JOBS_MAX_AGE_HOURS
+        })
     : undefined;
 
   return startFifoWatcher({

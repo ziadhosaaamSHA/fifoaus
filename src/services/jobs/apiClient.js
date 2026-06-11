@@ -21,11 +21,17 @@ async function readJsonResponse(response) {
   return payload;
 }
 
-export async function listJobsFromContentApi({ cfg, source, limit = 20 }) {
+function addAgeParams(url, { minAgeHours, maxAgeHours }) {
+  if (minAgeHours !== undefined) url.searchParams.set("minAgeHours", String(minAgeHours));
+  if (maxAgeHours !== undefined) url.searchParams.set("maxAgeHours", String(maxAgeHours));
+}
+
+export async function listJobsFromContentApi({ cfg, source, limit = 20, minAgeHours, maxAgeHours }) {
   const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
   const url = new URL(`${baseUrl}/api/jobs`);
   if (source) url.searchParams.set("source", source);
   url.searchParams.set("limit", String(limit));
+  addAgeParams(url, { minAgeHours, maxAgeHours });
 
   const response = await fetch(url, {
     headers: buildHeaders(cfg)
@@ -34,10 +40,11 @@ export async function listJobsFromContentApi({ cfg, source, limit = 20 }) {
   return payload.jobs || [];
 }
 
-export async function syncJobsFromContentApi({ cfg, source, maxResults }) {
+export async function syncJobsFromContentApi({ cfg, source, maxResults, minAgeHours, maxAgeHours }) {
   const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
   const url = new URL(`${baseUrl}/api/jobs/sync/${source}`);
   if (maxResults) url.searchParams.set("maxResults", String(maxResults));
+  addAgeParams(url, { minAgeHours, maxAgeHours });
 
   const response = await fetch(url, {
     method: "POST",
@@ -46,11 +53,12 @@ export async function syncJobsFromContentApi({ cfg, source, maxResults }) {
   return readJsonResponse(response);
 }
 
-export async function listNewsFromContentApi({ cfg, source, limit = 20 }) {
+export async function listNewsFromContentApi({ cfg, source, limit = 20, minAgeHours, maxAgeHours }) {
   const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
   const url = new URL(`${baseUrl}/api/news`);
   if (source) url.searchParams.set("source", source);
   url.searchParams.set("limit", String(limit));
+  addAgeParams(url, { minAgeHours, maxAgeHours });
 
   const response = await fetch(url, {
     headers: buildHeaders(cfg)
@@ -59,10 +67,11 @@ export async function listNewsFromContentApi({ cfg, source, limit = 20 }) {
   return payload.items || [];
 }
 
-export async function syncNewsFromContentApi({ cfg, source, maxResults }) {
+export async function syncNewsFromContentApi({ cfg, source, maxResults, minAgeHours, maxAgeHours }) {
   const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
   const url = new URL(`${baseUrl}/api/news/sync/${source}`);
   if (maxResults) url.searchParams.set("maxResults", String(maxResults));
+  addAgeParams(url, { minAgeHours, maxAgeHours });
 
   const response = await fetch(url, {
     method: "POST",

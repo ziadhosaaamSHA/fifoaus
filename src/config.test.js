@@ -28,10 +28,14 @@ describe("getConfig", () => {
     vi.stubEnv("LINKEDIN_FIFO_ENABLED", "false");
     vi.stubEnv("LINKEDIN_FIFO_CRON", "7 * * * *");
     vi.stubEnv("LINKEDIN_FIFO_MAX_RESULTS", "10");
+    vi.stubEnv("FIFO_JOBS_MIN_AGE_HOURS", undefined);
+    vi.stubEnv("FIFO_JOBS_MAX_AGE_HOURS", undefined);
     vi.stubEnv("NEWS_ENABLED", "false");
     vi.stubEnv("NEWS_CRON", "*/15 * * * *");
     vi.stubEnv("NEWS_MAX_RESULTS", "5");
     vi.stubEnv("NEWS_SOURCE", "australian-mining-review");
+    vi.stubEnv("NEWS_MIN_AGE_HOURS", undefined);
+    vi.stubEnv("NEWS_MAX_AGE_HOURS", undefined);
   });
 
   afterEach(() => {
@@ -50,6 +54,8 @@ describe("getConfig", () => {
     expect(config.NEWS_MAX_RESULTS).toBe(5);
     expect(config.NEWS_SOURCE).toBe("australian-mining-review");
     expect(config.NEWS_SOURCES).toEqual(["australian-mining-review"]);
+    expect(config.NEWS_MIN_AGE_HOURS).toBeUndefined();
+    expect(config.NEWS_MAX_AGE_HOURS).toBeUndefined();
   });
 
   it("should throw an error if a required field is missing", () => {
@@ -97,6 +103,26 @@ describe("getConfig", () => {
     const config = getConfig();
 
     expect(config.NEWS_SOURCES).toEqual(["australian-mining-review", "industry-qld"]);
+  });
+
+  it("should parse optional content age filters", () => {
+    vi.stubEnv("FIFO_JOBS_MAX_AGE_HOURS", "24");
+    vi.stubEnv("NEWS_MIN_AGE_HOURS", "24");
+
+    const config = getConfig();
+
+    expect(config.FIFO_JOBS_MAX_AGE_HOURS).toBe(24);
+    expect(config.NEWS_MIN_AGE_HOURS).toBe(24);
+  });
+
+  it("should treat blank content age filters as unset", () => {
+    vi.stubEnv("FIFO_JOBS_MAX_AGE_HOURS", "");
+    vi.stubEnv("NEWS_MIN_AGE_HOURS", "");
+
+    const config = getConfig();
+
+    expect(config.FIFO_JOBS_MAX_AGE_HOURS).toBeUndefined();
+    expect(config.NEWS_MIN_AGE_HOURS).toBeUndefined();
   });
 
   it("should parse optional content API settings", () => {

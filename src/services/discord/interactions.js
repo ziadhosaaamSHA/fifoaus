@@ -28,7 +28,9 @@ async function fetchJobsForInteraction({ cfg, source, maxResults }) {
   return listJobsFromContentApi({
     cfg,
     source,
-    limit: maxResults
+    limit: maxResults,
+    minAgeHours: cfg.FIFO_JOBS_MIN_AGE_HOURS,
+    maxAgeHours: cfg.FIFO_JOBS_MAX_AGE_HOURS
   });
 }
 
@@ -40,7 +42,9 @@ async function fetchNewsForInteraction({ cfg, source, maxResults }) {
   return listNewsFromContentApi({
     cfg,
     source,
-    limit: maxResults
+    limit: maxResults,
+    minAgeHours: cfg.NEWS_MIN_AGE_HOURS,
+    maxAgeHours: cfg.NEWS_MAX_AGE_HOURS
   });
 }
 

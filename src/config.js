@@ -2,6 +2,10 @@ import { z } from "zod";
 
 const discordIdSchema = z.string().regex(/^\d{17,20}$/, "invalid discord id");
 const envBooleanSchema = z.enum(["true", "false"]);
+const envAgeHoursSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.coerce.number().nonnegative().max(24 * 30).optional()
+);
 
 function parseEnvBoolean(value, defaultValue = false) {
   if (value === undefined) return defaultValue;
@@ -48,10 +52,15 @@ const configSchema = z.object({
   LINKEDIN_FIFO_CRON: z.string().min(1).optional(),
   LINKEDIN_FIFO_MAX_RESULTS: z.coerce.number().int().positive().max(25).optional(),
 
+  FIFO_JOBS_MIN_AGE_HOURS: envAgeHoursSchema,
+  FIFO_JOBS_MAX_AGE_HOURS: envAgeHoursSchema,
+
   NEWS_ENABLED: envBooleanSchema.optional(),
   NEWS_CRON: z.string().min(1).optional(),
   NEWS_MAX_RESULTS: z.coerce.number().int().positive().max(25).optional(),
-  NEWS_SOURCE: z.string().min(1).optional()
+  NEWS_SOURCE: z.string().min(1).optional(),
+  NEWS_MIN_AGE_HOURS: envAgeHoursSchema,
+  NEWS_MAX_AGE_HOURS: envAgeHoursSchema
 });
 
 function formatConfigError(error) {
@@ -82,11 +91,15 @@ export function getConfig() {
     LINKEDIN_FIFO_ENABLED: parseEnvBoolean(cfg.LINKEDIN_FIFO_ENABLED, false),
     LINKEDIN_FIFO_CRON: cfg.LINKEDIN_FIFO_CRON || "7 * * * *",
     LINKEDIN_FIFO_MAX_RESULTS: cfg.LINKEDIN_FIFO_MAX_RESULTS || 10,
+    FIFO_JOBS_MIN_AGE_HOURS: cfg.FIFO_JOBS_MIN_AGE_HOURS,
+    FIFO_JOBS_MAX_AGE_HOURS: cfg.FIFO_JOBS_MAX_AGE_HOURS,
 
     NEWS_ENABLED: parseEnvBoolean(cfg.NEWS_ENABLED, false),
     NEWS_CRON: cfg.NEWS_CRON || "*/15 * * * *",
     NEWS_MAX_RESULTS: cfg.NEWS_MAX_RESULTS || 5,
     NEWS_SOURCE: cfg.NEWS_SOURCE || "australian-mining-review",
-    NEWS_SOURCES: parseCsv(cfg.NEWS_SOURCE, "australian-mining-review")
+    NEWS_SOURCES: parseCsv(cfg.NEWS_SOURCE, "australian-mining-review"),
+    NEWS_MIN_AGE_HOURS: cfg.NEWS_MIN_AGE_HOURS,
+    NEWS_MAX_AGE_HOURS: cfg.NEWS_MAX_AGE_HOURS
   };
 }
