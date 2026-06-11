@@ -1,24 +1,22 @@
 import { getJobsConfig, startFifoWatcher } from "../helpers/watcher.js";
-import { fetchSeekFifoJobs } from "./scraper.js";
-
-const SOURCE = "seek:fifo";
+import { syncJobsFromContentApi } from "../apiClient.js";
 
 export async function startSeekFifoWatcher({ bot }) {
   const cfg = getJobsConfig();
+  const fetchScan = cfg.CONTENT_API_BASE_URL
+    ? ({ maxResults }) => syncJobsFromContentApi({ cfg, source: "seek", maxResults })
+    : undefined;
 
   return startFifoWatcher({
-    bot,
-    source: SOURCE,
     platform: "seek",
     label: "SEEK_FIFO",
+    channelLabel: "FIFO_JOBS_CHANNEL_ID",
     cronName: "seek-fifo",
     enabled: cfg.SEEK_FIFO_ENABLED,
-    channelId: cfg.SEEK_FIFO_CHANNEL_ID,
-    searchUrl: cfg.SEEK_FIFO_SEARCH_URL,
+    channelId: cfg.FIFO_JOBS_CHANNEL_ID,
     cronExpression: cfg.SEEK_FIFO_CRON,
     maxResults: cfg.SEEK_FIFO_MAX_RESULTS,
-    fetchJobs: fetchSeekFifoJobs,
-    sendJobsToChannel: ({ bot: discordBot, channelId, jobs }) =>
-      discordBot.sendSeekJobsToChannel({ channelId, jobs })
+    fetchScan,
+    sendJobsToChannel: ({ channelId, jobs }) => bot.sendSeekJobsToChannel({ channelId, jobs })
   });
 }

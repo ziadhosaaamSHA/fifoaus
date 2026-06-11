@@ -17,10 +17,12 @@ describe("getConfig", () => {
     vi.stubEnv("BASE_URL", "http://localhost:3000");
     vi.stubEnv("SUCCESS_URL", "http://localhost:3000/success");
     vi.stubEnv("CANCEL_URL", "http://localhost:3000/cancel");
+    vi.stubEnv("CONTENT_API_BASE_URL", undefined);
+    vi.stubEnv("CONTENT_API_TOKEN", undefined);
     vi.stubEnv("DISCORD_SUBSCRIBER_VOICE_CHANNEL_ID", "123456789012345678");
+    vi.stubEnv("FIFO_JOBS_CHANNEL_ID", "123456789012345678");
+    vi.stubEnv("NEWS_CHANNEL_ID", "");
     vi.stubEnv("SEEK_FIFO_ENABLED", "false");
-    vi.stubEnv("SEEK_FIFO_CHANNEL_ID", "123456789012345678");
-    vi.stubEnv("SEEK_FIFO_SEARCH_URL", "https://au.seek.com/FIFO-jobs");
     vi.stubEnv("SEEK_FIFO_CRON", "0 * * * *");
     vi.stubEnv("SEEK_FIFO_MAX_RESULTS", "10");
   });
@@ -34,7 +36,9 @@ describe("getConfig", () => {
     expect(config.STRIPE_SECRET).toBe("sk_test_123");
     expect(config.DISCORD_CLIENT_ID).toBe("123456789012345678");
     expect(config.SEEK_FIFO_ENABLED).toBe(false); // Default
-    expect(config.SEEK_FIFO_SEARCH_URL).toBe("https://au.seek.com/FIFO-jobs"); // Default
+    expect(config.SEEK_FIFO_MAX_RESULTS).toBe(10);
+    expect(config.FIFO_JOBS_CHANNEL_ID).toBe("123456789012345678");
+    expect(config.NEWS_CHANNEL_ID).toBeUndefined();
   });
 
   it("should throw an error if a required field is missing", () => {
@@ -56,5 +60,25 @@ describe("getConfig", () => {
     vi.stubEnv("SEEK_FIFO_ENABLED", "true");
     const config = getConfig();
     expect(config.SEEK_FIFO_ENABLED).toBe(true);
+  });
+
+  it("should parse optional content API settings", () => {
+    vi.stubEnv("CONTENT_API_BASE_URL", "https://content-api.example.com");
+    vi.stubEnv("CONTENT_API_TOKEN", "secret-token");
+
+    const config = getConfig();
+
+    expect(config.CONTENT_API_BASE_URL).toBe("https://content-api.example.com");
+    expect(config.CONTENT_API_TOKEN).toBe("secret-token");
+  });
+
+  it("should treat blank content API settings as unset", () => {
+    vi.stubEnv("CONTENT_API_BASE_URL", "");
+    vi.stubEnv("CONTENT_API_TOKEN", "");
+
+    const config = getConfig();
+
+    expect(config.CONTENT_API_BASE_URL).toBeUndefined();
+    expect(config.CONTENT_API_TOKEN).toBeUndefined();
   });
 });

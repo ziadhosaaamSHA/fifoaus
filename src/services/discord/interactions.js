@@ -1,11 +1,8 @@
 import { MessageFlags, PermissionsBitField } from "discord.js";
 import { isDbEnabled as isInviteDbEnabled, createInviteToken } from "../db/inviteTokens.js";
 import { hasPremium } from "./premium.js";
-import {
-  fetchLinkedInFifoJobs,
-  fetchSeekFifoJobs,
-  logScrapedJobs
-} from "../jobs/index.js";
+import { listJobsFromContentApi } from "../jobs/apiClient.js";
+import { logScrapedJobs } from "../jobs/index.js";
 import {
   createLinkedInJobEmbed,
   createLinkedInJobRow,
@@ -18,6 +15,18 @@ import {
 
 function stripTrailingSlash(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+async function fetchJobsForInteraction({ cfg, source, maxResults }) {
+  if (!cfg.CONTENT_API_BASE_URL) {
+    throw new Error("content_api_not_configured");
+  }
+
+  return listJobsFromContentApi({
+    cfg,
+    source,
+    limit: maxResults
+  });
 }
 
 export async function createCheckoutSessionForDiscordUser({ client, cfg, stripe, discordId }) {
@@ -295,10 +304,7 @@ export async function handleInteractionCreate({ client, cfg, stripe, state, inte
     await interaction.deferReply();
 
     try {
-      const jobs = await fetchSeekFifoJobs({
-        searchUrl: cfg.SEEK_FIFO_SEARCH_URL,
-        maxResults: 5
-      });
+      const jobs = await fetchJobsForInteraction({ cfg, source: "seek", maxResults: 5 });
       logScrapedJobs(jobs, "/seek-fifo");
 
       if (jobs.length === 0) {
@@ -316,7 +322,10 @@ export async function handleInteractionCreate({ client, cfg, stripe, state, inte
     } catch (err) {
       console.error("[discord] /seek-fifo failed", err);
       await interaction.editReply({
-        content: "Could not fetch FIFO jobs from SEEK right now. Please try again later."
+        content:
+          err?.message === "content_api_not_configured"
+            ? "CONTENT_API_BASE_URL is not configured for the bot service."
+            : "Could not fetch FIFO jobs from SEEK right now. Please try again later."
       });
     }
     return;
@@ -326,10 +335,7 @@ export async function handleInteractionCreate({ client, cfg, stripe, state, inte
     await interaction.deferReply();
 
     try {
-      const jobs = await fetchLinkedInFifoJobs({
-        searchUrl: cfg.LINKEDIN_FIFO_SEARCH_URL,
-        maxResults: 5
-      });
+      const jobs = await fetchJobsForInteraction({ cfg, source: "linkedin", maxResults: 5 });
       logScrapedJobs(jobs, "/linkedin-fifo");
 
       await postSeekJobsFromInteraction({
@@ -342,7 +348,10 @@ export async function handleInteractionCreate({ client, cfg, stripe, state, inte
     } catch (err) {
       console.error("[discord] /linkedin-fifo failed", err);
       await interaction.editReply({
-        content: "Could not fetch FIFO jobs from LinkedIn right now. Please try again later."
+        content:
+          err?.message === "content_api_not_configured"
+            ? "CONTENT_API_BASE_URL is not configured for the bot service."
+            : "Could not fetch FIFO jobs from LinkedIn right now. Please try again later."
       });
     }
     return;

@@ -1,53 +1,10 @@
 import { getConfig } from "../../../config.js";
-import {
-  countSeenJobListings,
-  ensureJobListingsTable,
-  isDbEnabled,
-  markJobListingSeen
-} from "../../db/jobListings.js";
 import { scheduleCronJob } from "./cron.js";
-
-function createMemoryStore() {
-  const seen = new Map();
-
-  return {
-    async getCount() {
-      return seen.size;
-    },
-    async markSeen(job) {
-      const key = job.externalId;
-      if (seen.has(key)) return false;
-      seen.set(key, {
-        platform: job.platform,
-        matchedKeywords: job.matchedKeywords
-      });
-      return true;
-    }
-  };
-}
-
-function createPersistentStore(source) {
-  return {
-    async getCount() {
-      return countSeenJobListings({ source });
-    },
-    async markSeen(job) {
-      return markJobListingSeen({
-        source,
-        externalId: job.externalId,
-        title: job.title,
-        url: job.url,
-        platform: job.platform,
-        matchedKeywords: job.matchedKeywords
-      });
-    }
-  };
-}
 
 export function logScrapedJobs(jobs, context = "watcher") {
   const platform = jobs[0]?.platform || "jobs";
   const sourceName = platform === "linkedin" ? "LinkedIn" : platform === "seek" ? "SEEK" : "jobs";
-  console.log(`[${platform}] scraped ${jobs.length} job(s) from ${sourceName}`);
+  console.log(`[${platform}] received ${jobs.length} job(s) from ${sourceName}`);
 
   jobs.forEach((job, index) => {
     const details = [job.company, job.location, job.salary].filter(Boolean).join(" | ");
@@ -55,23 +12,21 @@ export function logScrapedJobs(jobs, context = "watcher") {
       ? ` :: matched=${job.matchedKeywords.join(", ")}`
       : "";
     console.log(
-      `[${job.platform || platform}] ${context} scraped[${index + 1}] ${job.platform || platform}:${job.externalId} :: ${job.title}${details ? ` :: ${details}` : ""}${keywords}`
+      `[${job.platform || platform}] ${context} job[${index + 1}] ${job.platform || platform}:${job.externalId} :: ${job.title}${details ? ` :: ${details}` : ""}${keywords}`
     );
   });
 }
 
 export async function startFifoWatcher({
-  bot,
-  source,
   platform,
   label,
+  channelLabel = `${label}_CHANNEL_ID`,
   cronName,
   enabled,
   channelId,
-  searchUrl,
   cronExpression,
   maxResults,
-  fetchJobs,
+  fetchScan,
   sendJobsToChannel
 }) {
   if (!enabled) {
@@ -79,31 +34,19 @@ export async function startFifoWatcher({
   }
 
   if (!channelId) {
-    console.warn(`[${platform}] ${label}_ENABLED is true but ${label}_CHANNEL_ID is missing`);
+    console.warn(`[${platform}] ${label}_ENABLED is true but ${channelLabel} is missing`);
     return null;
   }
 
-  const store = isDbEnabled() ? createPersistentStore(source) : createMemoryStore();
-
-  if (isDbEnabled()) {
-    await ensureJobListingsTable();
-  } else {
-    console.warn(`[${platform}] DATABASE_URL not configured, using in-memory dedupe for ${label} listings`);
+  if (typeof fetchScan !== "function") {
+    console.warn(`[${platform}] ${label}_ENABLED is true but CONTENT_API_BASE_URL is missing`);
+    return null;
   }
 
-  let suppressNotificationsOnFirstRun = (await store.getCount()) === 0;
   let lastRunAt = null;
   let lastSuccessAt = null;
   let lastError = null;
   let running = false;
-
-  async function publishJobs(jobs) {
-    await sendJobsToChannel({
-      bot,
-      channelId,
-      jobs
-    });
-  }
 
   async function runScan({ reason, scheduledAt = new Date() }) {
     if (running) {
@@ -115,31 +58,17 @@ export async function startFifoWatcher({
     lastRunAt = scheduledAt;
 
     try {
-      const jobs = await fetchJobs({
-        searchUrl,
-        maxResults
-      });
+      const scan = await fetchScan({ maxResults });
+      const jobs = scan.jobs || [];
       logScrapedJobs(jobs);
 
-      const newJobs = [];
-      for (const job of jobs) {
-        const inserted = await store.markSeen(job);
+      if (scan.initialSync) {
         console.log(
-          `[${platform}] ${inserted ? "new" : "seen"} :: ${job.externalId} :: ${job.title}`
+          `[${platform}] initial API sync completed (${jobs.length} jobs seeded, no Discord post)`
         );
-        if (inserted) {
-          newJobs.push(job);
-        }
-      }
-
-      if (suppressNotificationsOnFirstRun) {
-        console.log(
-          `[${platform}] initial sync completed (${newJobs.length} jobs seeded, no Discord post)`
-        );
-        suppressNotificationsOnFirstRun = false;
-      } else if (newJobs.length > 0) {
-        await publishJobs(newJobs);
-        console.log(`[${platform}] posted ${newJobs.length} new FIFO jobs to Discord`);
+      } else if (jobs.length > 0) {
+        await sendJobsToChannel({ channelId, jobs });
+        console.log(`[${platform}] posted ${jobs.length} new FIFO jobs to Discord`);
       } else {
         console.log(`[${platform}] no new FIFO jobs found`);
       }
@@ -162,7 +91,7 @@ export async function startFifoWatcher({
     task: ({ scheduledAt }) => runScan({ reason: "cron", scheduledAt })
   });
 
-  console.log(`[${platform}] watcher started: ${searchUrl} on cron "${cronExpression}"`);
+  console.log(`[${platform}] API-backed watcher started on cron "${cronExpression}"`);
 
   return {
     stop() {

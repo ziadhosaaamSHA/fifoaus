@@ -78,41 +78,38 @@ If you omit `--discord-id`, the link can be redeemed by any Discord account with
 
 Run a one-off SEEK FIFO scrape from the command line:
 
-```bash
-npm run seek:fifo
-```
-
-That prints the latest 5 jobs the scraper can find by default.
-
-Optional flags:
-
-```bash
-npm run seek:fifo -- --limit 5
-npm run seek:fifo -- --url https://au.seek.com/FIFO-jobs
-```
-
 ## Notes
 
 - Discord ID is stored in Stripe metadata (`session.metadata.discord_id` and `subscription.metadata.discord_id`). This is how webhooks map back to a member without a database.
 - The bot needs the `GuildMembers` privileged intent enabled in the Discord Developer Portal to reliably fetch members for role changes/counting.
 
-## SEEK FIFO scraper
+## FIFO jobs
 
-Set these env vars to enable periodic SEEK scraping:
+The bot consumes jobs from the separate `content-api` service and posts all FIFO job
+sources into one Discord channel:
 
 ```env
+CONTENT_API_BASE_URL=https://your-content-api.railway.app
+CONTENT_API_TOKEN=shared-secret
+FIFO_JOBS_CHANNEL_ID=123456789012345678
+
 SEEK_FIFO_ENABLED=true
-SEEK_FIFO_CHANNEL_ID=123456789012345678
-SEEK_FIFO_SEARCH_URL=https://au.seek.com/FIFO-jobs
 SEEK_FIFO_CRON=0 * * * *
 SEEK_FIFO_MAX_RESULTS=10
+
+LINKEDIN_FIFO_ENABLED=true
+LINKEDIN_FIFO_CRON=7 * * * *
+LINKEDIN_FIFO_MAX_RESULTS=10
+
+NEWS_CHANNEL_ID=123456789012345678
 ```
 
-- `SEEK_FIFO_CRON` uses a standard 5-field cron format in the server's local timezone.
-- On first startup, the scraper seeds the current SEEK results without posting them, so the Discord channel is not flooded.
-- On later runs, only newly discovered FIFO job listings are posted.
-- If `DATABASE_URL` is configured, seen SEEK jobs are persisted across restarts. Otherwise, dedupe is in-memory only.
+- `SEEK_FIFO_CRON` and `LINKEDIN_FIFO_CRON` use standard 5-field cron format in the server's local timezone.
+- `FIFO_JOBS_CHANNEL_ID` is the single destination for all FIFO job sources.
+- `NEWS_CHANNEL_ID` is reserved for future news content.
+- Scraping, dedupe, and job persistence live in `content-api`.
 
 ## Railway
 
-Deploy as one service with the same env vars as `.env.example`.
+Deploy the root app as the Discord bot/consumer service. Deploy `content-api/` as a
+separate Railway service.

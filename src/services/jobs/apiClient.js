@@ -1,0 +1,47 @@
+function stripTrailingSlash(url) {
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+function buildHeaders(cfg) {
+  const headers = { Accept: "application/json" };
+  if (cfg.CONTENT_API_TOKEN) {
+    headers.Authorization = `Bearer ${cfg.CONTENT_API_TOKEN}`;
+  }
+  return headers;
+}
+
+async function readJsonResponse(response) {
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(payload.error || `content_api_error:${response.status}`);
+    err.status = response.status;
+    err.payload = payload;
+    throw err;
+  }
+  return payload;
+}
+
+export async function listJobsFromContentApi({ cfg, source, limit = 20 }) {
+  const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
+  const url = new URL(`${baseUrl}/api/jobs`);
+  if (source) url.searchParams.set("source", source);
+  url.searchParams.set("limit", String(limit));
+
+  const response = await fetch(url, {
+    headers: buildHeaders(cfg)
+  });
+  const payload = await readJsonResponse(response);
+  return payload.jobs || [];
+}
+
+export async function syncJobsFromContentApi({ cfg, source, maxResults }) {
+  const baseUrl = stripTrailingSlash(cfg.CONTENT_API_BASE_URL);
+  const url = new URL(`${baseUrl}/api/jobs/sync/${source}`);
+  if (maxResults) url.searchParams.set("maxResults", String(maxResults));
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: buildHeaders(cfg)
+  });
+  return readJsonResponse(response);
+}

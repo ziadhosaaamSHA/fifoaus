@@ -1,24 +1,22 @@
 import { getJobsConfig, startFifoWatcher } from "../helpers/watcher.js";
-import { fetchLinkedInFifoJobs } from "./scraper.js";
-
-const SOURCE = "linkedin:fifo";
+import { syncJobsFromContentApi } from "../apiClient.js";
 
 export async function startLinkedInFifoWatcher({ bot }) {
   const cfg = getJobsConfig();
+  const fetchScan = cfg.CONTENT_API_BASE_URL
+    ? ({ maxResults }) => syncJobsFromContentApi({ cfg, source: "linkedin", maxResults })
+    : undefined;
 
   return startFifoWatcher({
-    bot,
-    source: SOURCE,
     platform: "linkedin",
     label: "LINKEDIN_FIFO",
+    channelLabel: "FIFO_JOBS_CHANNEL_ID",
     cronName: "linkedin-fifo",
     enabled: cfg.LINKEDIN_FIFO_ENABLED,
-    channelId: cfg.LINKEDIN_FIFO_CHANNEL_ID,
-    searchUrl: cfg.LINKEDIN_FIFO_SEARCH_URL,
+    channelId: cfg.FIFO_JOBS_CHANNEL_ID,
     cronExpression: cfg.LINKEDIN_FIFO_CRON,
     maxResults: cfg.LINKEDIN_FIFO_MAX_RESULTS,
-    fetchJobs: fetchLinkedInFifoJobs,
-    sendJobsToChannel: ({ bot: discordBot, channelId, jobs }) =>
-      discordBot.sendLinkedInJobsToChannel({ channelId, jobs })
+    fetchScan,
+    sendJobsToChannel: ({ channelId, jobs }) => bot.sendLinkedInJobsToChannel({ channelId, jobs })
   });
 }
