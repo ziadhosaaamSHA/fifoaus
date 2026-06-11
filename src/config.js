@@ -84,7 +84,7 @@ export function getConfig() {
     LINKEDIN_FIFO_MAX_RESULTS: cfg.LINKEDIN_FIFO_MAX_RESULTS || 10,
 
     NEWS_ENABLED: parseEnvBoolean(cfg.NEWS_ENABLED, false),
-    NEWS_CRON: cfg.NEWS_CRON || "15 * * * *",
+    NEWS_CRON: cfg.NEWS_CRON || "*/15 * * * *",
     NEWS_MAX_RESULTS: cfg.NEWS_MAX_RESULTS || 5,
     NEWS_SOURCE: cfg.NEWS_SOURCE || "australian-mining-review",
     NEWS_SOURCES: parseCsv(cfg.NEWS_SOURCE, "australian-mining-review")

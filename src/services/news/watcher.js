@@ -43,8 +43,13 @@ export async function startNewsWatcher({ bot }) {
   const cfg = getConfig();
 
   if (!cfg.NEWS_ENABLED) {
+    console.log("[news] watcher disabled; set NEWS_ENABLED=true to enable");
     return null;
   }
+
+  console.log(
+    `[news] watcher enabled for sources "${cfg.NEWS_SOURCES.join(",")}" on cron "${cfg.NEWS_CRON}"`
+  );
 
   if (!cfg.NEWS_CHANNEL_ID) {
     console.warn("[news] NEWS_ENABLED is true but NEWS_CHANNEL_ID is missing");

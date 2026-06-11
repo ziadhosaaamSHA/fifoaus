@@ -29,7 +29,7 @@ describe("getConfig", () => {
     vi.stubEnv("LINKEDIN_FIFO_CRON", "7 * * * *");
     vi.stubEnv("LINKEDIN_FIFO_MAX_RESULTS", "10");
     vi.stubEnv("NEWS_ENABLED", "false");
-    vi.stubEnv("NEWS_CRON", "15 * * * *");
+    vi.stubEnv("NEWS_CRON", "*/15 * * * *");
     vi.stubEnv("NEWS_MAX_RESULTS", "5");
     vi.stubEnv("NEWS_SOURCE", "australian-mining-review");
   });
